@@ -3,20 +3,28 @@ import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import mongoose from "mongoose";
-import animalsRoutes from "./routes/animals";
+import animalsRoutes from "./routes/animals.js";
 
-import authRouter from "./routes/auth";
-import usersRouter from "./routes/users";
+import authRouter from "./routes/auth.js";
+import usersRouter from "./routes/users.js";
 
-import clinicRoutes from "./routes/clinic";
-import foundationRoutes from "./routes/foundation";
-import adminRoutes from "./routes/admin";
+import clinicRoutes from "./routes/clinic.js";
+import foundationRoutes from "./routes/foundation.js";
+import adminRoutes from "./routes/admin.js";
+import path from "path";
+import foundationAnimalsRoutes from "./routes/foundation.animals.js";
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 const app = express();
 
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
+const uploadsDir = path.resolve(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadsDir));
 
 app.get("/api/v1/health", (_req, res) => res.json({ ok: true }));
 
@@ -29,6 +37,9 @@ app.use("/api/v1/admin", adminRoutes);
 
 // ✅ SOLO ESTA
 app.use("/api/v1/animals", animalsRoutes);
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+
+app.use("/api/v1/foundation/animals", foundationAnimalsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 

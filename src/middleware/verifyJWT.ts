@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 export interface JwtUser {
-  _id: string;
+  id: string; // <- normalizado
   email: string;
   role: "ADOPTANTE" | "FUNDACION" | "CLINICA" | "ADMIN";
 }
@@ -24,10 +24,20 @@ export function verifyJWT(req: Request, res: Response, next: NextFunction) {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error("JWT_SECRET no configurado");
 
-    const payload = jwt.verify(token, secret) as JwtUser;
-    req.user = payload;
+    const raw: any = jwt.verify(token, secret);
+
+    // ⚠️ El token que generas tiene `sub` como id; normalizamos a `id`
+    const id = raw?.sub || raw?._id || raw?.id;
+    if (!id) return res.status(401).json({ error: "Token inválido" });
+
+    req.user = {
+      id: String(id),
+      email: String(raw?.email || ""),
+      role: raw?.role,
+    };
+
     next();
-  } catch (err) {
+  } catch (_err) {
     return res.status(401).json({ error: "Token inválido o expirado" });
   }
 }
