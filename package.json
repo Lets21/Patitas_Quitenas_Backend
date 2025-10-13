@@ -2,10 +2,13 @@
   "name": "api-adoptaquito",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "seed": "tsx tools/seed.ts",
+    
+    "dev": "ts-node-dev src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js"
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": "20.x"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
