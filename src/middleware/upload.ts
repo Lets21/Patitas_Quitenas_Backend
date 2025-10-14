@@ -1,11 +1,8 @@
 // backend/src/middleware/upload.ts
 import type { Request } from "express";
-import multer from "multer";
+import multer, { FileFilterCallback } from "multer";
 import path from "path";
 import fs from "fs";
-
-// Callback con la firma que necesitamos, sin pelear con @types/multer
-type MyFileFilterCb = (error: Error | null, acceptFile: boolean) => void;
 
 const baseDir = path.resolve(__dirname, "..", "..", "uploads");
 fs.mkdirSync(baseDir, { recursive: true });
@@ -21,10 +18,11 @@ const storage = multer.diskStorage({
   },
 });
 
-const fileFilter = (_req: Request, file: Express.Multer.File, cb: MyFileFilterCb): void => {
+// Firma EXACTA que espera Multer
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCallback): void => {
   const ok = /^(image\/jpeg|image\/png|image\/webp|image\/jpg)$/i.test(file.mimetype);
-  if (ok) return cb(null, true);
-  return cb(new Error("Tipo de archivo no permitido. Usa JPG, PNG o WEBP."), false);
+  // No mandamos Error en el primer arg para evitar la incompatibilidad de tipos
+  cb(null, ok);
 };
 
 export const upload = multer({
