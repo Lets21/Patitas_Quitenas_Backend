@@ -1,7 +1,14 @@
-import jwt from "jsonwebtoken";
-export function signJwt(payload: object) {
-  return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: process.env.JWT_EXPIRES_IN || "7d" });
-}
-export function verifyJwt<T>(token: string): T {
-  return jwt.verify(token, process.env.JWT_SECRET!) as T;
-}
+import jwt, { JwtPayload, SignOptions } from 'jsonwebtoken';
+import { JwtUser } from '../types/user';
+
+const accessSecret  = process.env.JWT_ACCESS_SECRET  as string;
+const refreshSecret = process.env.JWT_REFRESH_SECRET as string;
+
+export const signAccessToken = (payload: JwtUser, opts: SignOptions = {}) =>
+  jwt.sign(payload, accessSecret, { expiresIn: '15m', ...opts });
+
+export const signRefreshToken = (payload: Pick<JwtUser,'id'>, opts: SignOptions = {}) =>
+  jwt.sign(payload, refreshSecret, { expiresIn: '7d', ...opts });
+
+export const verifyAccessToken = (token: string) =>
+  jwt.verify(token, accessSecret) as JwtUser & JwtPayload;

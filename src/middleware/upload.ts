@@ -1,40 +1,34 @@
 // backend/src/middleware/upload.ts
+import type { Request } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
 
-// === __dirname para ESM ===
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Callback con la firma que necesitamos, sin pelear con @types/multer
+type MyFileFilterCb = (error: Error | null, acceptFile: boolean) => void;
 
-// Carpeta base donde guardaremos archivos subidos.
-// Puedes usar process.cwd() o partir desde este archivo.
-const baseDir = path.resolve(process.cwd(), "uploads");
-// const baseDir = path.join(__dirname, "..", "..", "uploads"); // alternativo también válido
+const baseDir = path.resolve(__dirname, "..", "..", "uploads");
 fs.mkdirSync(baseDir, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
+  destination(_req, _file, cb) {
     cb(null, baseDir);
   },
-  filename: (_req, file, cb) => {
-    // nombre: 1712345678901-original.ext
+  filename(_req, file, cb) {
     const ts = Date.now();
     const safeOriginal = file.originalname.replace(/\s+/g, "_");
     cb(null, `${ts}-${safeOriginal}`);
   },
 });
 
-const fileFilter: multer.Options["fileFilter"] = (_req, file, cb) => {
-  // Acepta solo imágenes
-  const allowed = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-  if (allowed.includes(file.mimetype)) return cb(null, true);
-  cb(new Error("Tipo de archivo no permitido. Usa JPG, PNG o WEBP."));
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: MyFileFilterCb): void => {
+  const ok = /^(image\/jpeg|image\/png|image\/webp|image\/jpg)$/i.test(file.mimetype);
+  if (ok) return cb(null, true);
+  return cb(new Error("Tipo de archivo no permitido. Usa JPG, PNG o WEBP."), false);
 };
 
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
