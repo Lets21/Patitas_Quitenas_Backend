@@ -2,6 +2,7 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import type { CorsOptions, CorsOptionsDelegate } from "cors";
 import mongoose from "mongoose";
 import path from "path";
 
@@ -16,22 +17,48 @@ import foundationAnimalsRoutes from "./routes/foundation.animals";
 
 const app = express();
 
-/* ----------------------------- CORS aceptable ----------------------------- */
-/* Permite varias origins separadas por coma en CORS_ORIGIN.
-   Ej: CORS_ORIGIN="http://localhost:5173,https://tu-front.vercel.app" */
-const rawOrigins = (process.env.CORS_ORIGIN || "*").split(",").map(s => s.trim());
-const origins = rawOrigins.length === 1 && rawOrigins[0] === "*" ? "*" : rawOrigins;
+/* ------------------------------- CORS robusto ------------------------------ */
+/* Lee una lista separada por coma en CORS_ORIGIN y permite previews de Vercel.
+   Ej: CORS_ORIGIN="http://localhost:5173,https://patitas-quitenas.vercel.app" */
+const staticAllowed = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map(s => s.trim())
+  .filter(Boolean);
 
-app.use(cors({
-  origin: origins as string | string[],
-  credentials: true
-}));
+// Acepta cualquier preview: https://patitas-quitenas-<hash>.vercel.app
+const vercelPreview = /^https:\/\/patitas-quitenas-[a-z0-9-]+\.vercel\.app$/i;
+
+const corsDelegate: CorsOptionsDelegate = (req, cb) => {
+  // FIX: CorsRequest no tiene req.header(); tomamos de headers
+  const reqOrigin = (req.headers?.origin as string) || "";
+
+  const allowed =
+    !reqOrigin || staticAllowed.includes(reqOrigin) || vercelPreview.test(reqOrigin);
+
+  const options: CorsOptions = {
+    origin: allowed, // true o false
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  };
+  cb(null, options);
+};
+
+// Debe ir antes de las rutas
+app.use(cors(corsDelegate));
+// Preflight para todo
+app.options("*", cors(corsDelegate));
+// Ayuda a caches/proxies a variar por Origin
+app.use((_req, res, next) => {
+  res.header("Vary", "Origin");
+  next();
+});
 
 /* ----------------------------- Parsers & static ---------------------------- */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// Ojo: en runtime __dirname apunta a /dist/src. Subimos 1 nivel para llegar a /dist.
+// En runtime, __dirname apunta a /dist/src. Subimos 1 nivel para llegar a /dist.
 const uploadsDir = path.resolve(__dirname, "..", "uploads");
 app.use("/uploads", express.static(uploadsDir));
 
