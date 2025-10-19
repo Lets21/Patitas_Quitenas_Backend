@@ -71,4 +71,51 @@ router.get("/", async (_req: Request, res: Response, next: NextFunction) => {
   }
 });
 
+/**
+ * GET /api/v1/animals/:id
+ * Devuelve un animal específico por ID
+ */
+router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const doc = await Animal.findById(id).lean();
+
+    if (!doc) {
+      return res.status(404).json({ error: "Animal no encontrado" });
+    }
+
+    const attrs = doc?.attributes || {};
+
+    const animal = {
+      id: String(doc._id),
+      name: doc.name ?? "Sin nombre",
+      photos: Array.isArray(doc.photos) ? doc.photos : [],
+
+      clinicalSummary: String(doc.clinicalSummary ?? ""),
+      state: toState(doc.state),
+
+      attributes: {
+        age: Number(attrs.age ?? 0),
+        size: toSize(attrs.size),
+        breed: String(attrs.breed ?? "Mestizo"),
+        gender: toGender(attrs.gender),
+        energy: toEnergy(attrs.energy),
+        coexistence: {
+          children: Boolean(attrs?.coexistence?.children ?? false),
+          cats: Boolean(attrs?.coexistence?.cats ?? false),
+          dogs: Boolean(attrs?.coexistence?.dogs ?? false),
+        },
+      },
+
+      foundationId: doc.foundationId ?? undefined,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    };
+
+    res.json(animal);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
