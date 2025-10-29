@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { Animal } from "../models/Animal.js";
-import { ClinicalRecord } from "../models/ClinicalRecord.js";
-import { verifyJWT } from "../middleware/verifyJWT.js";
-import { requireRole } from "../middleware/requireRole.js";
-import { upload } from "../middleware/upload.js";
+import { Animal } from "../models/Animal";
+import { ClinicalRecord } from "../models/ClinicalRecord";
+import { verifyJWT } from "../middleware/verifyJWT";
+import { requireRole } from "../middleware/requireRole";
+import { upload } from "../middleware/upload";
 import fs from "fs";
 import path from "path";
 

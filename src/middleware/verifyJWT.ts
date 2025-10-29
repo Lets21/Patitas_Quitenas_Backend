@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from "express";
-import jwt from "jsonwebtoken";
+import { verifyJwt } from "../utils/jwt";
 
 export interface JwtUser {
-  id: string; // <- normalizado
+  id: string;
   email: string;
   role: "ADOPTANTE" | "FUNDACION" | "CLINICA" | "ADMIN";
 }
 
+// Extendemos Express.Request para tener req.user tipado
 declare global {
   namespace Express {
     interface Request {
@@ -17,18 +18,24 @@ declare global {
 
 export function verifyJWT(req: Request, res: Response, next: NextFunction) {
   try {
+    // 1. leer header Authorization: "Bearer <token>"
     const auth = req.headers.authorization || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-    if (!token) return res.status(401).json({ error: "No token provided" });
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error("JWT_SECRET no configurado");
+    if (!token) {
+      return res.status(401).json({ error: "No token provided" });
+    }
 
-    const raw: any = jwt.verify(token, secret);
+    // 2. verificar token usando la MISMA secret que signJwt
+    //    (esto internamente usa JWT_ACCESS_SECRET)
+    const raw: any = verifyJwt(token);
 
-    // ⚠️ El token que generas tiene `sub` como id; normalizamos a `id`
+    // 3. normalizar el usuario
+    //    tu login firma como: { sub: user._id, email, role }
     const id = raw?.sub || raw?._id || raw?.id;
-    if (!id) return res.status(401).json({ error: "Token inválido" });
+    if (!id) {
+      return res.status(401).json({ error: "Token inválido" });
+    }
 
     req.user = {
       id: String(id),
@@ -36,8 +43,10 @@ export function verifyJWT(req: Request, res: Response, next: NextFunction) {
       role: raw?.role,
     };
 
+    // 4. dejar pasar
     next();
-  } catch (_err) {
+  } catch (err) {
+    console.error("verifyJWT error:", err);
     return res.status(401).json({ error: "Token inválido o expirado" });
   }
 }
