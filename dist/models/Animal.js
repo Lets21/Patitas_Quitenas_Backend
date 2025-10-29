@@ -26,3 +26,4 @@ const AnimalSchema = new mongoose_1.Schema({
 // Búsqueda por nombre/raza
 AnimalSchema.index({ name: "text", "attributes.breed": "text" });
 exports.Animal = (0, mongoose_1.model)("Animal", AnimalSchema);
+//# sourceMappingURL=Animal.js.map

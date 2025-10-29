@@ -14,3 +14,4 @@ router.patch("/me", auth_1.requireAuth, async (req, res) => {
     res.json(user);
 });
 exports.default = router;
+//# sourceMappingURL=users.js.map

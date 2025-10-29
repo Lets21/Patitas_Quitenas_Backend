@@ -53,3 +53,4 @@ router.post("/login", async (req, res) => {
     res.json({ user: safeUser, token });
 });
 exports.default = router;
+//# sourceMappingURL=auth.js.map

@@ -10,3 +10,4 @@ router.get("/animals", verifyJWT_1.verifyJWT, (0, requireRole_1.requireRole)("FU
     return res.json({ animals: [], user: req.user });
 });
 exports.default = router;
+//# sourceMappingURL=foundation.js.map

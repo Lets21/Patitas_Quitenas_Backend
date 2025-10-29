@@ -30,3 +30,4 @@ function verifyJWT(req, res, next) {
         return res.status(401).json({ error: "Token inválido o expirado" });
     }
 }
+//# sourceMappingURL=verifyJWT.js.map

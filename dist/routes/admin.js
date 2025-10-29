@@ -10,3 +10,4 @@ router.get("/overview", verifyJWT_1.verifyJWT, (0, requireRole_1.requireRole)("A
     return res.json({ ok: true, scope: "admin", user: req.user });
 });
 exports.default = router;
+//# sourceMappingURL=admin.js.map

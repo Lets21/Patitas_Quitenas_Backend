@@ -12,3 +12,4 @@ function requireRole(...allowed) {
         next();
     };
 }
+//# sourceMappingURL=requireRole.js.map

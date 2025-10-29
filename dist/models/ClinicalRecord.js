@@ -60,3 +60,4 @@ const ClinicalRecordSchema = new mongoose_1.Schema({
 exports.ClinicalRecord = mongoose_1.default.models.ClinicalRecord ||
     mongoose_1.default.model("ClinicalRecord", ClinicalRecordSchema);
 exports.default = exports.ClinicalRecord;
+//# sourceMappingURL=ClinicalRecord.js.map

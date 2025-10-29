@@ -10,3 +10,4 @@ router.get("/records", verifyJWT_1.verifyJWT, (0, requireRole_1.requireRole)("CL
     return res.json({ records: [], user: req.user });
 });
 exports.default = router;
+//# sourceMappingURL=clinic.js.map
