@@ -1,35 +1,32 @@
-// backend/src/utils/jwt.ts
-import jwt, { JwtPayload, SignOptions, VerifyOptions } from "jsonwebtoken";
+// src/utils/jwt.ts
+import jwt, { type SignOptions, type Secret } from "jsonwebtoken";
 
-const ACCESS_SECRET  = process.env.JWT_ACCESS_SECRET  as string;
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string;
+const JWT_SECRET: Secret = (process.env.JWT_SECRET ?? "").trim();
 
-/** Firma un JWT (por defecto con el ACCESS_SECRET) */
-export function signJwt<T extends object>(
-  payload: T,
-  options: SignOptions = {},
-  useRefreshSecret = false
-): string {
-  const secret = useRefreshSecret ? REFRESH_SECRET : ACCESS_SECRET;
-  if (!secret) throw new Error("JWT secret no configurado");
-  // puedes setear expiresIn por defecto si quieres:
-  const defaults: SignOptions = { expiresIn: options.expiresIn ?? "15m" };
-  return jwt.sign(payload, secret, { ...defaults, ...options });
+type ExpiresIn = NonNullable<SignOptions["expiresIn"]>;
+const RAW_TTL = process.env.TOKEN_TTL ?? "15m";
+const ACCESS_TTL: ExpiresIn = /^\d+(\.\d+)?$/.test(RAW_TTL)
+  ? Number(RAW_TTL)
+  : (RAW_TTL as ExpiresIn);
+
+export type JwtPayloadBase = {
+  sub: string;           // user id
+  email: string;
+  role: "ADMIN" | "FUNDACION" | "CLINICA" | "ADOPTANTE";
+  type?: "access";
+};
+
+// ✅ Export con el nombre que espera auth.ts
+export function signJwt(payload: JwtPayloadBase, opts: SignOptions = {}): string {
+  if (!JWT_SECRET) throw new Error("JWT_SECRET no está definido");
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TTL, ...opts });
 }
 
-/** Verifica un JWT y devuelve el payload tipado */
-export function verifyJwt<T extends object = JwtPayload>(
-  token: string,
-  options: VerifyOptions = {},
-  useRefreshSecret = false
-): T & JwtPayload {
-  const secret = useRefreshSecret ? REFRESH_SECRET : ACCESS_SECRET;
-  if (!secret) throw new Error("JWT secret no configurado");
-  return jwt.verify(token, secret, options) as T & JwtPayload;
-}
+// (si quieres conservar también el nombre nuevo)
+export const signAccessToken = (payload: JwtPayloadBase, opts: SignOptions = {}) =>
+  signJwt(payload, opts);
 
-/** Helpers por si quieres usarlos explícitos */
-export const signAccessToken = <T extends object>(p: T, o?: SignOptions) => signJwt<T>(p, o, false);
-export const signRefreshToken = <T extends object>(p: T, o?: SignOptions) => signJwt<T>(p, o, true);
-export const verifyAccessToken = <T extends object>(t: string, o?: VerifyOptions) => verifyJwt<T>(t, o, false);
-export const verifyRefreshToken = <T extends object>(t: string, o?: VerifyOptions) => verifyJwt<T>(t, o, true);
+export function verifyJwt<T = JwtPayloadBase>(token: string): T {
+  if (!JWT_SECRET) throw new Error("JWT_SECRET no está definido");
+  return jwt.verify(token, JWT_SECRET) as T;
+}

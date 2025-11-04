@@ -1,4 +1,6 @@
+// src/routes/animals.ts
 import { Router, Request, Response, NextFunction } from "express";
+import mongoose from "mongoose";
 import { Animal } from "../models/Animal"; // sin .js en TS
 
 const router = Router();
@@ -27,6 +29,33 @@ const toState = (v: any): AState => {
   return (ok.includes(s) ? s : "AVAILABLE") as AState;
 };
 
+/** Normalizador común (listado y detalle) */
+function mapDocToDto(d: any) {
+  const attrs = d?.attributes || {};
+  return {
+    id: String(d._id),
+    name: d.name ?? "Sin nombre",
+    photos: Array.isArray(d.photos) ? d.photos : [],
+    clinicalSummary: String(d.clinicalSummary ?? ""),
+    state: toState(d.state),
+    attributes: {
+      age: Number(attrs.age ?? d.age ?? 0),
+      size: toSize(attrs.size ?? d.size),
+      breed: String(attrs.breed ?? d.breed ?? "Mestizo"),
+      gender: toGender(attrs.gender ?? d.gender),
+      energy: toEnergy(attrs.energy ?? d.energy),
+      coexistence: {
+        children: Boolean(attrs?.coexistence?.children ?? d?.goodWith?.children ?? false),
+        cats: Boolean(attrs?.coexistence?.cats ?? d?.goodWith?.cats ?? false),
+        dogs: Boolean(attrs?.coexistence?.dogs ?? d?.goodWith?.dogs ?? false),
+      },
+    },
+    foundationId: d.foundationId ?? undefined,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+  };
+}
+
 /**
  * GET /api/v1/animals
  * Devuelve { animals, total } con la forma que consume el front.
@@ -34,37 +63,7 @@ const toState = (v: any): AState => {
 router.get("/", async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const docs = await Animal.find().lean();
-
-    const animals = (docs as any[]).map((d) => {
-      const attrs = d?.attributes || {};
-
-      return {
-        id: String(d._id),
-        name: d.name ?? "Sin nombre",
-        photos: Array.isArray(d.photos) ? d.photos : [],
-
-        clinicalSummary: String(d.clinicalSummary ?? ""),
-        state: toState(d.state),
-
-        attributes: {
-          age: Number(attrs.age ?? d.age ?? 0),
-          size: toSize(attrs.size ?? d.size),
-          breed: String(attrs.breed ?? d.breed ?? "Mestizo"),
-          gender: toGender(attrs.gender ?? d.gender),
-          energy: toEnergy(attrs.energy ?? d.energy),
-          coexistence: {
-            children: Boolean(attrs?.coexistence?.children ?? d?.goodWith?.children ?? false),
-            cats: Boolean(attrs?.coexistence?.cats ?? d?.goodWith?.cats ?? false),
-            dogs: Boolean(attrs?.coexistence?.dogs ?? d?.goodWith?.dogs ?? false),
-          },
-        },
-
-        foundationId: d.foundationId ?? undefined,
-        createdAt: d.createdAt,
-        updatedAt: d.updatedAt,
-      };
-    });
-
+    const animals = (docs as any[]).map(mapDocToDto);
     res.json({ animals, total: animals.length });
   } catch (err) {
     next(err);
@@ -74,6 +73,7 @@ router.get("/", async (_req: Request, res: Response, next: NextFunction) => {
 /**
  * GET /api/v1/animals/:id
  * Devuelve un animal específico por ID
+ * Detalle público: usa el mismo normalizador que el listado.
  */
 router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -113,6 +113,18 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
     };
 
     res.json(animal);
+
+    // Validación segura de ObjectId
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const doc = await Animal.findById(id).lean();
+    if (!doc) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    res.json(mapDocToDto(doc));
   } catch (err) {
     next(err);
   }

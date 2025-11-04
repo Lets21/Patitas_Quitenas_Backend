@@ -1,61 +1,37 @@
-import { Request, Response, NextFunction, RequestHandler } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { verifyJwt } from "../utils/jwt";
 
-/** Roles que usas en la app */
-export type Role = "ADMIN" | "ADOPTANTE" | "FUNDACION" | "CLINICA";
+const COOKIE_NAME = (process.env.COOKIE_NAME || "auth").trim();
 
-/** Payload mínimo que guardas en el token */
-export interface JwtUser {
-  id: string;
-  role: Role;
-  email?: string;
+function extractToken(req: Request): string | null {
+  const raw =
+    (req.headers.authorization as string | undefined) ||
+    ((req.headers as any).Authorization as string | undefined);
+  const bearer = raw?.startsWith("Bearer ") ? raw.slice(7) : undefined;
+  const fromCookie = (req as any).cookies?.[COOKIE_NAME];
+  return bearer || fromCookie || null;
 }
 
-/** Usuario que colgamos en req.user (compatible con JwtUser)
- *  sub queda opcional para no romper si algún token lo trae.
- */
-export interface AuthUser extends JwtUser {
-  sub?: string;
-}
-
-/** Augment de Express: permite req.user en toda la app */
-declare module "express-serve-static-core" {
-  interface Request {
-    user?: AuthUser;
-  }
-}
-
-/** Middleware: exige token válido y cuelga req.user */
-export const requireAuth: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-  const hdr = req.headers.authorization || "";
-  const token = hdr.startsWith("Bearer ") ? hdr.slice(7) : null;
-
-  if (!token) {
-    return res.status(401).json({ error: "No autorizado" });
-  }
-
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const token = extractToken(req);
+  if (!token) return res.status(401).json({ error: "No token provided" });
   try {
-    // verifyJwt debe devolver al menos { id, role, email? }
-    const payload = verifyJwt<JwtUser>(token);
-
-    // Normalizamos lo que guardamos en req.user
-    req.user = { id: payload.id, role: payload.role, email: payload.email };
-
+    const payload = verifyJwt(token);
+    if ((payload as any).type && (payload as any).type !== "access") {
+      return res.status(401).json({ error: "Token inválido" });
+    }
+    (req as any).user = payload;
     next();
   } catch {
-    return res.status(401).json({ error: "Token inválido" });
+    return res.status(401).json({ error: "Token inválido o expirado" });
   }
-};
+}
 
-/** Middleware: exige que el usuario tenga uno de los roles dados */
-export function requireRole(...roles: Role[]): RequestHandler {
+export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ error: "No autorizado" });
-    }
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: "Prohibido" });
-    }
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ error: "No token provided" });
+    if (!roles.includes(user.role)) return res.status(403).json({ error: "Forbidden" });
     next();
   };
 }

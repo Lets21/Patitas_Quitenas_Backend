@@ -1,13 +1,24 @@
+// backend/src/routes/foundation.animals.ts
 import { Router } from "express";
 import { Animal } from "../models/Animal";
 import { ClinicalRecord } from "../models/ClinicalRecord";
 import { verifyJWT } from "../middleware/verifyJWT";
 import { requireRole } from "../middleware/requireRole";
 import { upload } from "../middleware/upload";
+import type { Request, Response, NextFunction } from "express";
+import { Animal } from "../models/Animal.js";
+import { ClinicalRecord } from "../models/ClinicalRecord.js";
+import { verifyJWT } from "../middleware/verifyJWT.js";
+import { requireRole } from "../middleware/requireRole.js";
+import { upload } from "../middleware/upload.js";
 import fs from "fs";
 import path from "path";
 
 const router = Router();
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
 
 // Convierte ruta absoluta de archivo en URL pública servida por express.static("/uploads")
 function publicPath(localFullPath: string) {
@@ -16,29 +27,66 @@ function publicPath(localFullPath: string) {
   return idx >= 0 ? norm.slice(idx) : norm;
 }
 
-// LISTAR perros de mi fundación
-router.get("/", verifyJWT, requireRole("FUNDACION"), async (req, res, next) => {
+// Obtiene id de usuario de forma tolerante (id | _id | sub)
+function getUserId(req: Request): string | null {
+  const u: any = (req as any).user || {};
+  return (
+    (typeof u.id === "string" && u.id) ||
+    (typeof u._id === "string" && u._id) ||
+    (typeof u.sub === "string" && u.sub) ||
+    null
+  );
+}
+
+// Intenta parsear JSON; si falla, devuelve fallback
+function safeJsonParse<T = any>(value: any, fallback: T): T {
+  if (value == null) return fallback;
+  if (typeof value !== "string") return (value as T);
   try {
-    const foundationId = req.user!.id; // ← ya viene normalizado del middleware
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* GET /api/v1/foundation/animals                                             */
+/* Lista los animales de la fundación autenticada.                            */
+/* Devuelve { animals, total }                                                */
+/* -------------------------------------------------------------------------- */
+router.get("/", verifyJWT, requireRole("FUNDACION"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const foundationId = getUserId(req);
+    if (!foundationId) return res.status(401).json({ error: "No se pudo determinar el usuario" });
+
     const animals = await Animal.find({ foundationId }).sort({ createdAt: -1 }).lean();
-    res.json({ animals, total: animals.length });
+    return res.json({ animals, total: animals.length });
   } catch (e) {
     next(e);
   }
 });
 
-// CREAR perro (con fotos)
+/* -------------------------------------------------------------------------- */
+/* POST /api/v1/foundation/animals                                            */
+/* Crea un animal (multipart o JSON). Fuerza foundationId desde el token.     */
+/* Body esperado (multipart/JSON):                                            */
+/* - name, clinicalSummary, state                                             */
+/* - attributes: JSON { age,size,breed,gender,energy,coexistence{...} }       */
+/* - photos: files[] (campo "photos")                                         */
+/* Respuesta: { data: Animal }                                                */
+/* -------------------------------------------------------------------------- */
 router.post(
   "/",
   verifyJWT,
   requireRole("FUNDACION"),
   upload.array("photos", 6),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const foundationId = req.user!.id;
+      const foundationId = getUserId(req);
+      if (!foundationId) return res.status(401).json({ error: "No se pudo determinar el usuario" });
 
-      const { name, clinicalSummary, state } = req.body;
-      const attributes = req.body?.attributes ? JSON.parse(req.body.attributes) : {};
+      const { name = "", clinicalSummary = "", state = "AVAILABLE" } = req.body as any;
+      const attributes = safeJsonParse(req.body?.attributes, {});
 
       const photos: string[] =
         (req.files as Express.Multer.File[] | undefined)?.map((f) => publicPath(f.path)) || [];
@@ -47,47 +95,58 @@ router.post(
         name,
         photos,
         attributes,
-        clinicalSummary: clinicalSummary || "",
-        state: state || "AVAILABLE",
+        clinicalSummary,
+        state,
         foundationId,
       });
 
-      res.status(201).json({ data: doc });
+      return res.status(201).json({ data: doc });
     } catch (e) {
       next(e);
     }
   }
 );
 
-// ACTUALIZAR perro (puede subir nuevas fotos)
+/* -------------------------------------------------------------------------- */
+/* PATCH /api/v1/foundation/animals/:id                                       */
+/* Actualiza si el animal pertenece a la fundación.                           */
+/* Acepta multipart/JSON.                                                     */
+/* - Puede enviar "keepPhotos" (JSON array) para conservar las actuales       */
+/* - Puede adjuntar nuevas fotos en "photos"                                  */
+/* Respuesta: { data: Animal }                                                */
+/* -------------------------------------------------------------------------- */
 router.patch(
   "/:id",
   verifyJWT,
   requireRole("FUNDACION"),
   upload.array("photos", 6),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const foundationId = req.user!.id;
-      const { id } = req.params;
+      const foundationId = getUserId(req);
+      if (!foundationId) return res.status(401).json({ error: "No se pudo determinar el usuario" });
 
+      const { id } = req.params;
       const animal = await Animal.findById(id);
       if (!animal) return res.status(404).json({ error: "Not found" });
-      if (String(animal.foundationId) !== String(foundationId))
+      if (String(animal.foundationId) !== String(foundationId)) {
         return res.status(403).json({ error: "Forbidden" });
+      }
 
+      const body: any = { ...req.body };
       const updates: any = {};
-      if (req.body.name !== undefined) updates.name = req.body.name;
-      if (req.body.clinicalSummary !== undefined) updates.clinicalSummary = req.body.clinicalSummary;
-      if (req.body.state !== undefined) updates.state = req.body.state;
-      if (req.body.attributes !== undefined) updates.attributes = JSON.parse(req.body.attributes);
+
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.clinicalSummary !== undefined) updates.clinicalSummary = body.clinicalSummary;
+      if (body.state !== undefined) updates.state = body.state;
+      if (body.attributes !== undefined) updates.attributes = safeJsonParse(body.attributes, body.attributes);
 
       const newPhotos =
         (req.files as Express.Multer.File[] | undefined)?.map((f) => publicPath(f.path)) || [];
 
-      // Mantener fotos existentes si viene keepPhotos (opcional)
-      if (req.body.keepPhotos) {
-        const keep: string[] = JSON.parse(req.body.keepPhotos);
-        updates.photos = [...(animal.photos || [])].filter((p) => keep.includes(p));
+      // Manejo de fotos actuales
+      const keepPhotos = safeJsonParse<string[]>(body.keepPhotos, null as any);
+      if (Array.isArray(keepPhotos)) {
+        updates.photos = (animal.photos || []).filter((p) => keepPhotos.includes(p));
       } else {
         updates.photos = animal.photos || [];
       }
@@ -96,57 +155,75 @@ router.patch(
         updates.photos = [...(updates.photos || []), ...newPhotos];
       }
 
-      const updated = await Animal.findByIdAndUpdate(id, updates, { new: true });
-      res.json({ data: updated });
+      const updated = await Animal.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+      return res.json({ data: updated });
     } catch (e) {
       next(e);
     }
   }
 );
 
-// BORRAR perro
-router.delete("/:id", verifyJWT, requireRole("FUNDACION"), async (req, res, next) => {
+/* -------------------------------------------------------------------------- */
+/* DELETE /api/v1/foundation/animals/:id                                      */
+/* Elimina si pertenece a la fundación.                                       */
+/* Opcionalmente borra del disco las fotos en /uploads                        */
+/* Respuesta: { ok: true }                                                    */
+/* -------------------------------------------------------------------------- */
+router.delete("/:id", verifyJWT, requireRole("FUNDACION"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const foundationId = req.user!.id;
-    const { id } = req.params;
+    const foundationId = getUserId(req);
+    if (!foundationId) return res.status(401).json({ error: "No se pudo determinar el usuario" });
 
+    const { id } = req.params;
     const animal = await Animal.findById(id);
     if (!animal) return res.status(404).json({ error: "Not found" });
-    if (String(animal.foundationId) !== String(foundationId))
+    if (String(animal.foundationId) !== String(foundationId)) {
       return res.status(403).json({ error: "Forbidden" });
+    }
 
     // (Opcional) borrar fotos del disco
     for (const p of animal.photos || []) {
-      if (p.startsWith("/uploads/")) {
+      if (p?.startsWith?.("/uploads/")) {
         const full = path.join(process.cwd(), p);
-        if (fs.existsSync(full)) fs.unlinkSync(full);
+        if (fs.existsSync(full)) {
+          try { fs.unlinkSync(full); } catch { /* ignore */ }
+        }
       }
     }
 
     await animal.deleteOne();
-    res.json({ ok: true });
+    return res.json({ ok: true });
   } catch (e) {
     next(e);
   }
 });
 
-// ACTUALIZAR ficha clínica básica (fundación)
+/* -------------------------------------------------------------------------- */
+/* POST /api/v1/foundation/animals/:id/clinical                               */
+/* Actualiza la ficha clínica básica (fundación).                             */
+/* Body: record (JSON), evidence (files opcional)                             */
+/* Respuesta: { data: ClinicalRecord }                                        */
+/* -------------------------------------------------------------------------- */
 router.post(
   "/:id/clinical",
   verifyJWT,
   requireRole("FUNDACION"),
   upload.array("evidence", 6),
-  async (req, res, next) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const foundationId = req.user!.id;
-      const { id } = req.params;
+      const foundationId = getUserId(req);
+      if (!foundationId) return res.status(401).json({ error: "No se pudo determinar el usuario" });
 
+      const { id } = req.params;
       const animal = await Animal.findById(id);
       if (!animal) return res.status(404).json({ error: "Not found" });
-      if (String(animal.foundationId) !== String(foundationId))
+      if (String(animal.foundationId) !== String(foundationId)) {
         return res.status(403).json({ error: "Forbidden" });
+      }
 
-      const payload = req.body?.record ? JSON.parse(req.body.record) : {};
+      const payload = safeJsonParse(req.body?.record, {});
+      // Si quisieras registrar URLs de evidencias, podrías mapear aquí:
+      // const evidence = (req.files as Express.Multer.File[] | undefined)?.map(f => publicPath(f.path)) || [];
 
       const record = await ClinicalRecord.findOneAndUpdate(
         { animalId: id },
@@ -154,11 +231,14 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
 
-      res.json({ data: record });
+      return res.json({ data: record });
     } catch (e) {
       next(e);
     }
   }
 );
 
+router.get("/__ping", (req, res) => {
+  res.json({ ok: true, who: "foundation.animals.ts" });
+});
 export default router;
