@@ -7,13 +7,11 @@
     "dev": "ts-node-dev src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "seed": "tsx tools/seed.ts"
+    "seed": "tsx tools/seed.ts",
     "clean": "rimraf dist",
-    "build": "tsc -p .",
     "build:watch": "tsc -w -p .",
-    "start": "node dist/server.js",
     "start:watch": "nodemon -q dist/server.js",
-    "dev": "concurrently -k \"npm:build:watch\" \"npm:start:watch\""
+    "dev:watch": "concurrently -k \"npm:build:watch\" \"npm:start:watch\""
   },
   "engines": {
     "node": "20.x"

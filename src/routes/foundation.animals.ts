@@ -6,11 +6,6 @@ import { verifyJWT } from "../middleware/verifyJWT";
 import { requireRole } from "../middleware/requireRole";
 import { upload } from "../middleware/upload";
 import type { Request, Response, NextFunction } from "express";
-import { Animal } from "../models/Animal.js";
-import { ClinicalRecord } from "../models/ClinicalRecord.js";
-import { verifyJWT } from "../middleware/verifyJWT.js";
-import { requireRole } from "../middleware/requireRole.js";
-import { upload } from "../middleware/upload.js";
 import fs from "fs";
 import path from "path";
 
@@ -41,7 +36,7 @@ function getUserId(req: Request): string | null {
 // Intenta parsear JSON; si falla, devuelve fallback
 function safeJsonParse<T = any>(value: any, fallback: T): T {
   if (value == null) return fallback;
-  if (typeof value !== "string") return (value as T);
+  if (typeof value !== "string") return value as T;
   try {
     return JSON.parse(value) as T;
   } catch {
@@ -69,11 +64,6 @@ router.get("/", verifyJWT, requireRole("FUNDACION"), async (req: Request, res: R
 /* -------------------------------------------------------------------------- */
 /* POST /api/v1/foundation/animals                                            */
 /* Crea un animal (multipart o JSON). Fuerza foundationId desde el token.     */
-/* Body esperado (multipart/JSON):                                            */
-/* - name, clinicalSummary, state                                             */
-/* - attributes: JSON { age,size,breed,gender,energy,coexistence{...} }       */
-/* - photos: files[] (campo "photos")                                         */
-/* Respuesta: { data: Animal }                                                */
 /* -------------------------------------------------------------------------- */
 router.post(
   "/",
@@ -110,10 +100,6 @@ router.post(
 /* -------------------------------------------------------------------------- */
 /* PATCH /api/v1/foundation/animals/:id                                       */
 /* Actualiza si el animal pertenece a la fundación.                           */
-/* Acepta multipart/JSON.                                                     */
-/* - Puede enviar "keepPhotos" (JSON array) para conservar las actuales       */
-/* - Puede adjuntar nuevas fotos en "photos"                                  */
-/* Respuesta: { data: Animal }                                                */
 /* -------------------------------------------------------------------------- */
 router.patch(
   "/:id",
@@ -143,7 +129,6 @@ router.patch(
       const newPhotos =
         (req.files as Express.Multer.File[] | undefined)?.map((f) => publicPath(f.path)) || [];
 
-      // Manejo de fotos actuales
       const keepPhotos = safeJsonParse<string[]>(body.keepPhotos, null as any);
       if (Array.isArray(keepPhotos)) {
         updates.photos = (animal.photos || []).filter((p) => keepPhotos.includes(p));
@@ -165,9 +150,6 @@ router.patch(
 
 /* -------------------------------------------------------------------------- */
 /* DELETE /api/v1/foundation/animals/:id                                      */
-/* Elimina si pertenece a la fundación.                                       */
-/* Opcionalmente borra del disco las fotos en /uploads                        */
-/* Respuesta: { ok: true }                                                    */
 /* -------------------------------------------------------------------------- */
 router.delete("/:id", verifyJWT, requireRole("FUNDACION"), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -200,9 +182,6 @@ router.delete("/:id", verifyJWT, requireRole("FUNDACION"), async (req: Request, 
 
 /* -------------------------------------------------------------------------- */
 /* POST /api/v1/foundation/animals/:id/clinical                               */
-/* Actualiza la ficha clínica básica (fundación).                             */
-/* Body: record (JSON), evidence (files opcional)                             */
-/* Respuesta: { data: ClinicalRecord }                                        */
 /* -------------------------------------------------------------------------- */
 router.post(
   "/:id/clinical",
@@ -222,8 +201,6 @@ router.post(
       }
 
       const payload = safeJsonParse(req.body?.record, {});
-      // Si quisieras registrar URLs de evidencias, podrías mapear aquí:
-      // const evidence = (req.files as Express.Multer.File[] | undefined)?.map(f => publicPath(f.path)) || [];
 
       const record = await ClinicalRecord.findOneAndUpdate(
         { animalId: id },
@@ -241,4 +218,5 @@ router.post(
 router.get("/__ping", (req, res) => {
   res.json({ ok: true, who: "foundation.animals.ts" });
 });
+
 export default router;
