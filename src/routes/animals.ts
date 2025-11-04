@@ -53,6 +53,10 @@ function mapDocToDto(d: any) {
     foundationId: d.foundationId ?? undefined,
     createdAt: d.createdAt,
     updatedAt: d.updatedAt,
+    // Incluir los nuevos campos opcionales
+    personality: d.personality ?? undefined,
+    compatibility: d.compatibility ?? undefined,
+    clinicalHistory: d.clinicalHistory ?? undefined,
   };
 }
 

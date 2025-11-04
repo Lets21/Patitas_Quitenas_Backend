@@ -44,6 +44,75 @@ function safeJsonParse<T = any>(value: any, fallback: T): T {
   }
 }
 
+// Valida y sanitiza personality (1-5)
+function sanitizePersonality(personality: any): any {
+  if (!personality || typeof personality !== "object") return undefined;
+  const result: any = {};
+  const fields = ["sociability", "energy", "training", "adaptability"];
+  for (const field of fields) {
+    if (personality[field] !== undefined && personality[field] !== null) {
+      const val = Number(personality[field]);
+      if (!isNaN(val) && val >= 1 && val <= 5) {
+        result[field] = Math.round(val);
+      }
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+// Valida y sanitiza compatibility (booleans)
+function sanitizeCompatibility(compatibility: any): any {
+  if (!compatibility || typeof compatibility !== "object") return undefined;
+  const result: any = {};
+  const fields = ["kids", "cats", "dogs", "apartment"];
+  for (const field of fields) {
+    if (compatibility[field] !== undefined && compatibility[field] !== null) {
+      result[field] = Boolean(compatibility[field]);
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+// Valida y sanitiza clinicalHistory
+function sanitizeClinicalHistory(clinicalHistory: any): any {
+  if (!clinicalHistory || typeof clinicalHistory !== "object") return undefined;
+  const result: any = {};
+  if (clinicalHistory.lastVaccination !== undefined && clinicalHistory.lastVaccination !== null) {
+    result.lastVaccination = String(clinicalHistory.lastVaccination);
+  }
+  if (clinicalHistory.sterilized !== undefined && clinicalHistory.sterilized !== null) {
+    result.sterilized = Boolean(clinicalHistory.sterilized);
+  }
+  if (clinicalHistory.conditions !== undefined && clinicalHistory.conditions !== null) {
+    result.conditions = String(clinicalHistory.conditions);
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+// Extrae los nuevos campos desde body o desde el campo "extra" (JSON string)
+function extractExtraFields(body: any): { personality?: any; compatibility?: any; clinicalHistory?: any } {
+  let extra: any = {};
+  
+  // Intentar leer desde el campo "extra" (JSON string en multipart/form-data)
+  if (body.extra) {
+    const parsed = safeJsonParse(body.extra, null);
+    if (parsed && typeof parsed === "object" && parsed !== null) {
+      extra = { ...extra, ...(parsed as Record<string, any>) };
+    }
+  }
+  
+  // También aceptar campos directos (JSON plano o multipart con campos planos)
+  if (body.personality) extra.personality = body.personality;
+  if (body.compatibility) extra.compatibility = body.compatibility;
+  if (body.clinicalHistory) extra.clinicalHistory = body.clinicalHistory;
+  
+  return {
+    personality: sanitizePersonality(extra.personality),
+    compatibility: sanitizeCompatibility(extra.compatibility),
+    clinicalHistory: sanitizeClinicalHistory(extra.clinicalHistory),
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* GET /api/v1/foundation/animals                                             */
 /* Lista los animales de la fundación autenticada.                            */
@@ -81,6 +150,9 @@ router.post(
       const photos: string[] =
         (req.files as Express.Multer.File[] | undefined)?.map((f) => publicPath(f.path)) || [];
 
+      // Extraer y validar campos adicionales (personality, compatibility, clinicalHistory)
+      const extraFields = extractExtraFields(req.body);
+
       const doc = await Animal.create({
         name,
         photos,
@@ -88,6 +160,7 @@ router.post(
         clinicalSummary,
         state,
         foundationId,
+        ...extraFields,
       });
 
       return res.status(201).json({ data: doc });
@@ -125,6 +198,12 @@ router.patch(
       if (body.clinicalSummary !== undefined) updates.clinicalSummary = body.clinicalSummary;
       if (body.state !== undefined) updates.state = body.state;
       if (body.attributes !== undefined) updates.attributes = safeJsonParse(body.attributes, body.attributes);
+
+      // Extraer y validar campos adicionales (personality, compatibility, clinicalHistory)
+      const extraFields = extractExtraFields(body);
+      if (extraFields.personality !== undefined) updates.personality = extraFields.personality;
+      if (extraFields.compatibility !== undefined) updates.compatibility = extraFields.compatibility;
+      if (extraFields.clinicalHistory !== undefined) updates.clinicalHistory = extraFields.clinicalHistory;
 
       const newPhotos =
         (req.files as Express.Multer.File[] | undefined)?.map((f) => publicPath(f.path)) || [];
