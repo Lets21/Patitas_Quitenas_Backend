@@ -23,6 +23,35 @@ const AttributesSchema = new Schema(
   { _id: false }
 );
 
+const PersonalitySchema = new Schema(
+  {
+    sociability: { type: Number, min: 1, max: 5 },
+    energy: { type: Number, min: 1, max: 5 },
+    training: { type: Number, min: 1, max: 5 },
+    adaptability: { type: Number, min: 1, max: 5 },
+  },
+  { _id: false }
+);
+
+const CompatibilitySchema = new Schema(
+  {
+    kids: { type: Boolean },
+    cats: { type: Boolean },
+    dogs: { type: Boolean },
+    apartment: { type: Boolean },
+  },
+  { _id: false }
+);
+
+const ClinicalHistorySchema = new Schema(
+  {
+    lastVaccination: { type: String, default: null },
+    sterilized: { type: Boolean },
+    conditions: { type: String, default: null },
+  },
+  { _id: false }
+);
+
 const AnimalSchema = new Schema(
   {
     name: { type: String, required: true, index: true },
@@ -31,6 +60,10 @@ const AnimalSchema = new Schema(
     clinicalSummary: { type: String, default: "" },
     state: { type: String, enum: ["AVAILABLE", "RESERVED", "ADOPTED"], default: "AVAILABLE" },
     foundationId: { type: Types.ObjectId, ref: "User", required: true },
+    // Nuevos campos opcionales
+    personality: { type: PersonalitySchema, required: false },
+    compatibility: { type: CompatibilitySchema, required: false },
+    clinicalHistory: { type: ClinicalHistorySchema, required: false },
   },
   { timestamps: true }
 );
