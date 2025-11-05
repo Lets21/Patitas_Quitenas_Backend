@@ -4,11 +4,25 @@ import bcrypt from "bcryptjs";
 export type Role = "ADMIN" | "ADOPTANTE" | "FUNDACION" | "CLINICA";
 export type UserStatus = "ACTIVE" | "SUSPENDED";
 
+export type SizePref = "SMALL" | "MEDIUM" | "LARGE";
+export type EnergyLevel = "LOW" | "MEDIUM" | "HIGH";
+export type OtherPets = "none" | "dog" | "cat" | "both";
+
+interface Preferences {
+  preferredSize: SizePref;
+  preferredEnergy: EnergyLevel;
+  hasChildren: boolean;
+  otherPets: OtherPets;   // none/dog/cat/both
+  dwelling: string;       // house/apartment/etc.
+  completed: boolean;     // si ya hizo onboarding
+}
+
 interface Profile {
   firstName: string;
   lastName: string;
   phone?: string;
   address?: string;
+  preferences?: Preferences;
 }
 
 export interface IUser {
@@ -31,6 +45,22 @@ const userSchema = new Schema<IUser>(
       lastName: { type: String, required: true },
       phone: String,
       address: String,
+      preferences: {
+        preferredSize: {
+          type: String,
+          enum: ["SMALL", "MEDIUM", "LARGE"],
+          default: "MEDIUM",
+        },
+        preferredEnergy: {
+          type: String,
+          enum: ["LOW", "MEDIUM", "HIGH"],
+          default: "MEDIUM",
+        },
+        hasChildren: { type: Boolean, default: false },
+        otherPets: { type: String, enum: ["none", "dog", "cat", "both"], default: "none" },
+        dwelling: { type: String, default: "" },
+        completed: { type: Boolean, default: false },
+      },
     },
     status: { type: String, enum: ["ACTIVE","SUSPENDED"], default: "ACTIVE" },
     foundationName: String,

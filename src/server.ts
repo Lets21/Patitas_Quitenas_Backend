@@ -18,6 +18,7 @@ import clinicRoutes from "./routes/clinic";
 import foundationRoutes from "./routes/foundation";
 import adminRoutes from "./routes/admin";
 import foundationAnimalsRoutes from "./routes/foundation.animals";
+import applicationsRouter from "./routes/applications";
 
 const app = express();
 
@@ -76,6 +77,8 @@ app.use("/api/v1/animals", animalsRoutes); // catálogo público
 app.use("/api/v1/users", requireAuth, usersRouter);
 app.use("/api/v1/clinic", requireAuth, clinicRoutes);
 app.use("/api/v1/admin", requireAuth, requireRole("ADMIN"), adminRoutes);
+// Solicitudes de adopción
+app.use("/api/v1/applications", applicationsRouter); // el router decide auth/roles
 
 /**
  * ⚠️ IMPORTANTE: Montar PRIMERO la subruta específica de animales de fundación
