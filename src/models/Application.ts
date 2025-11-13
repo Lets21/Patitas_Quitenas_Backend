@@ -22,8 +22,21 @@ export interface ApplicationDoc extends Document {
     budget?: "básico" | "medio" | "alto" | string;
     experience?: "primera_vez" | "con_experiencia" | string;
     notes?: string;
+    // Nuevos campos del formulario oficial
+    familyDecision?: "agree" | "accept" | "indifferent" | "disagree";
+    monthlyBudget?: "high" | "medium" | "low";
+    allowVisits?: "yes" | "no";
+    acceptSterilization?: "yes" | "no";
+    housing?: "Casa urbana" | "Casa de campo" | "Departamento" | "Quinta" | "Hacienda" | "Otro";
+    relationAnimals?: "positive" | "neutral" | "negative";
+    travelPlans?: "withOwner" | "withFamily" | "withFriend" | "paidCaretaker" | "hotel" | "other";
+    behaviorResponse?: "trainOrAccept" | "seekHelp" | "punish" | "abandon";
+    careCommitment?: "fullCare" | "mediumCare" | "lowCare";
   };
   status: ApplicationStatus;
+  scorePct: number;
+  scoreDetail: Record<string, { value: any; contribution: number }>;
+  eligible: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -103,6 +116,22 @@ const ApplicationSchema = new Schema<ApplicationDoc>(
       default: "RECEIVED",
       index: true,
       required: true,
+    },
+    scorePct: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+      index: true,
+    },
+    scoreDetail: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+    eligible: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
   },
   {
