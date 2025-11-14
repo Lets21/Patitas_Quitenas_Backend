@@ -2,19 +2,12 @@ import { Router } from "express";
 import { verifyJWT } from "../middleware/verifyJWT";
 import { requireRole } from "../middleware/requireRole";
 import { getFoundationStats } from "../controllers/foundationStats";
+import { getFoundationAnalytics } from "../controllers/foundationAnalytics";
 
 const router = Router();
 
-// GET /api/v1/foundation/animals
-router.get(
-  "/animals",
-  verifyJWT,
-  requireRole("FUNDACION"),
-  async (req, res) => {
-    // TODO: trae animales de la fundación
-    return res.json({ animals: [], user: req.user });
-  }
-);
+// Note: /animals routes are now handled by foundation.animals.ts router
+// which is mounted separately in server.ts as /api/v1/foundation/animals
 
 // GET /api/v1/foundation/stats
 router.get(
@@ -22,6 +15,14 @@ router.get(
   verifyJWT,
   requireRole("FUNDACION"),
   getFoundationStats
+);
+
+// GET /api/v1/foundation/analytics
+router.get(
+  "/analytics",
+  verifyJWT,
+  requireRole("FUNDACION"),
+  getFoundationAnalytics
 );
 
 export default router;

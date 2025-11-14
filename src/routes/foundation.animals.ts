@@ -5,6 +5,7 @@ import { ClinicalRecord } from "../models/ClinicalRecord";
 import { verifyJWT } from "../middleware/verifyJWT";
 import { requireRole } from "../middleware/requireRole";
 import { upload } from "../middleware/upload";
+import { getFoundationAnimals } from "../controllers/foundationAnimals";
 import type { Request, Response, NextFunction } from "express";
 import fs from "fs";
 import path from "path";
@@ -115,20 +116,10 @@ function extractExtraFields(body: any): { personality?: any; compatibility?: any
 
 /* -------------------------------------------------------------------------- */
 /* GET /api/v1/foundation/animals                                             */
-/* Lista los animales de la fundación autenticada.                            */
-/* Devuelve { animals, total }                                                */
+/* Lista los animales de la fundación autenticada con paginación y filtros.   */
+/* Usa el controller getFoundationAnimals que devuelve formato completo       */
 /* -------------------------------------------------------------------------- */
-router.get("/", verifyJWT, requireRole("FUNDACION"), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const foundationId = getUserId(req);
-    if (!foundationId) return res.status(401).json({ error: "No se pudo determinar el usuario" });
-
-    const animals = await Animal.find({ foundationId }).sort({ createdAt: -1 }).lean();
-    return res.json({ animals, total: animals.length });
-  } catch (e) {
-    next(e);
-  }
-});
+router.get("/", verifyJWT, requireRole("FUNDACION"), getFoundationAnimals);
 
 /* -------------------------------------------------------------------------- */
 /* POST /api/v1/foundation/animals                                            */
