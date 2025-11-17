@@ -13,7 +13,7 @@ function toRole(v: any): Role | undefined {
 export function requireRole(...allowed: Role[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     // en runtime, req.user viene del middleware de auth (JWT)
-    const raw = (req as any).user?.role;           // puede ser string
+    const raw = req.user?.role;                    // puede ser string
     const role = toRole(raw);                      // -> Role | undefined
 
     if (!role) return res.status(401).json({ error: "No autenticado o rol inválido" });

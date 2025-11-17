@@ -25,14 +25,21 @@ interface Profile {
   preferences?: Preferences;
 }
 
+interface Organization {
+  name: string;
+  description?: string;
+}
+
 export interface IUser {
   email: string;
   password: string;
   role: Role;
   profile: Profile;
   status: UserStatus;
+  isActive: boolean;
   foundationName?: string; // opcional para FUNDACION
   clinicName?: string;     // opcional para CLINICA
+  organization?: Organization; // información de la organización
 }
 
 const userSchema = new Schema<IUser>(
@@ -63,8 +70,13 @@ const userSchema = new Schema<IUser>(
       },
     },
     status: { type: String, enum: ["ACTIVE","SUSPENDED"], default: "ACTIVE" },
+    isActive: { type: Boolean, default: true },
     foundationName: String,
     clinicName: String,
+    organization: {
+      name: String,
+      description: String,
+    },
   },
   { timestamps: true }
 );
