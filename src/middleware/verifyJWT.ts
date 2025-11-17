@@ -39,6 +39,7 @@ export function verifyJWT(req: Request, res: Response, next: NextFunction) {
 
     req.user = {
       id: String(id),
+      sub: String(id),
       email: String(raw?.email || ""),
       role: raw?.role,
     };
