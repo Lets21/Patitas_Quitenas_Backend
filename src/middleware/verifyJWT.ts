@@ -3,6 +3,7 @@ import { verifyJwt } from "../utils/jwt";
 
 export interface JwtUser {
   id: string;
+  sub: string;
   email: string;
   role: "ADOPTANTE" | "FUNDACION" | "CLINICA" | "ADMIN";
 }
