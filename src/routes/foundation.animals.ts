@@ -7,21 +7,13 @@ import { requireRole } from "../middleware/requireRole";
 import { upload } from "../middleware/upload";
 import { getFoundationAnimals } from "../controllers/foundationAnimals";
 import type { Request, Response, NextFunction } from "express";
-import fs from "fs";
-import path from "path";
+import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryUpload";
 
 const router = Router();
 
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
-
-// Convierte ruta absoluta de archivo en URL pública servida por express.static("/uploads")
-function publicPath(localFullPath: string) {
-  const norm = localFullPath.replace(/\\/g, "/");
-  const idx = norm.lastIndexOf("/uploads/");
-  return idx >= 0 ? norm.slice(idx) : norm;
-}
 
 // Obtiene id de usuario de forma tolerante (id | _id | sub)
 function getUserId(req: Request): string | null {
@@ -138,8 +130,19 @@ router.post(
       const { name = "", clinicalSummary = "", state = "AVAILABLE" } = req.body as any;
       const attributes = safeJsonParse(req.body?.attributes, {});
 
-      const photos: string[] =
-        (req.files as Express.Multer.File[] | undefined)?.map((f) => publicPath(f.path)) || [];
+      // Subir fotos a Cloudinary
+      const photos: string[] = [];
+      const files = req.files as Express.Multer.File[] | undefined;
+      if (files && files.length > 0) {
+        for (const file of files) {
+          try {
+            const url = await uploadToCloudinary(file.buffer, "animals");
+            photos.push(url);
+          } catch (error) {
+            console.error("[POST Animal] Error uploading to Cloudinary:", error);
+          }
+        }
+      }
 
       // Extraer y validar campos adicionales (personality, compatibility, clinicalHistory)
       const extraFields = extractExtraFields(req.body);
@@ -196,14 +199,39 @@ router.patch(
       if (extraFields.compatibility !== undefined) updates.compatibility = extraFields.compatibility;
       if (extraFields.clinicalHistory !== undefined) updates.clinicalHistory = extraFields.clinicalHistory;
 
-      const newPhotos =
-        (req.files as Express.Multer.File[] | undefined)?.map((f) => publicPath(f.path)) || [];
+      // Subir nuevas fotos a Cloudinary
+      const newPhotos: string[] = [];
+      const files = req.files as Express.Multer.File[] | undefined;
+      if (files && files.length > 0) {
+        for (const file of files) {
+          try {
+            const url = await uploadToCloudinary(file.buffer, "animals");
+            newPhotos.push(url);
+          } catch (error) {
+            console.error("[PATCH Animal] Error uploading to Cloudinary:", error);
+          }
+        }
+      }
 
+      // Manejar keepPhotos - eliminar las que no se mantienen de Cloudinary
       const keepPhotos = safeJsonParse<string[]>(body.keepPhotos, null as any);
+      const photosToDelete: string[] = [];
+      
       if (Array.isArray(keepPhotos)) {
+        // Identificar fotos a eliminar
+        photosToDelete.push(...(animal.photos || []).filter((p) => !keepPhotos.includes(p)));
         updates.photos = (animal.photos || []).filter((p) => keepPhotos.includes(p));
       } else {
         updates.photos = animal.photos || [];
+      }
+
+      // Eliminar fotos no mantenidas de Cloudinary
+      for (const photoUrl of photosToDelete) {
+        try {
+          await deleteFromCloudinary(photoUrl);
+        } catch (error) {
+          console.error("[PATCH Animal] Error deleting from Cloudinary:", error);
+        }
       }
 
       if (newPhotos.length) {
@@ -233,13 +261,12 @@ router.delete("/:id", verifyJWT, requireRole("FUNDACION"), async (req: Request, 
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // (Opcional) borrar fotos del disco
-    for (const p of animal.photos || []) {
-      if (p?.startsWith?.("/uploads/")) {
-        const full = path.join(process.cwd(), p);
-        if (fs.existsSync(full)) {
-          try { fs.unlinkSync(full); } catch { /* ignore */ }
-        }
+    // Eliminar fotos de Cloudinary
+    for (const photoUrl of animal.photos || []) {
+      try {
+        await deleteFromCloudinary(photoUrl);
+      } catch (error) {
+        console.error("[DELETE Animal] Error deleting from Cloudinary:", error);
       }
     }
 

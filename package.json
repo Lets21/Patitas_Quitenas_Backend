@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "seed": "tsx tools/seed.ts",
+    "test:cloudinary": "tsx tools/testCloudinary.ts",
+    "migrate:images": "tsx tools/migrateImagesToCloudinary.ts",
     "clean": "rimraf dist",
     "build:watch": "tsc -w -p .",
     "start:watch": "nodemon -q dist/server.js",
@@ -18,6 +20,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
