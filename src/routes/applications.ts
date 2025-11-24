@@ -4,6 +4,8 @@ import { Application } from "../models/Application";
 import { Animal } from "../models/Animal";
 import { User } from "../models/User";
 import { requireAuth } from "../middleware/auth";
+import { requireRole } from "../middleware/requireRole";
+import { verifyJWT } from "../middleware/verifyJWT";
 import { scoreApplication } from "../services/scoring/scoreApplication";
 import mongoose from "mongoose";
 
@@ -239,7 +241,7 @@ router.get("/mine", requireAuth, async (req, res, next) => {
     // Primero obtener las solicitudes sin populate para tener los IDs
     const rawList = await Application
       .find({ adopterId: adopterIdQuery })
-      .select("_id animalId adopterId scorePct status createdAt")
+      .select("_id animalId adopterId scorePct status createdAt rejectReason")
       .lean();
     
     // Hacer populate manual para cada solicitud
@@ -400,7 +402,7 @@ router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunct
     debugLog("📋 Query de búsqueda:", JSON.stringify(q, null, 2));
     
     // Primero obtener las solicitudes sin populate para ver los IDs
-    const rawList = await Application.find(q).select("_id animalId adopterId foundationId scorePct status createdAt").lean();
+    const rawList = await Application.find(q).select("_id animalId adopterId foundationId scorePct status createdAt rejectReason").lean();
     
     debugLog("📋 Solicitudes RAW (antes de populate):");
     rawList.forEach((app: any, idx: number) => {
@@ -615,6 +617,39 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response, next: Next
     if (!updated) return res.status(404).json({ error: "Solicitud no encontrada" });
     res.json(updated);
   } catch (e) { next(e); }
+});
+
+// PATCH /api/v1/applications/:id/reject (FUNDACION)
+router.patch("/:id/reject", verifyJWT, requireRole("FUNDACION"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const u: any = (req as any).user || {};
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
+      return res.status(400).json({ error: "El motivo de rechazo es requerido" });
+    }
+
+    const app = await Application.findById(id);
+    if (!app) {
+      return res.status(404).json({ error: "Solicitud no encontrada" });
+    }
+
+    // Verificar que la solicitud pertenece a la fundación
+    const foundationId = u.id || u._id || u.sub;
+    const appFoundationId = app.foundationId?.toString();
+    if (appFoundationId !== foundationId.toString()) {
+      return res.status(403).json({ error: "No tienes permiso para rechazar esta solicitud" });
+    }
+
+    app.status = "REJECTED";
+    app.rejectReason = reason.trim();
+    await app.save();
+
+    return res.json({ ok: true, message: "Solicitud rechazada correctamente" });
+  } catch (e) {
+    next(e);
+  }
 });
 
 // GET /api/v1/applications/ranking (FUNDACION/ADMIN)
