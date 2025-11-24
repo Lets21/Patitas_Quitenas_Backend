@@ -109,6 +109,52 @@ const ApplicationSchema = new Schema<ApplicationDoc>(
         required: false,
       },
       notes: { type: String, trim: true },
+      // Nuevos campos del formulario oficial
+      familyDecision: {
+        type: String,
+        enum: ["agree", "accept", "indifferent", "disagree"],
+        required: false,
+      },
+      monthlyBudget: {
+        type: String,
+        enum: ["high", "medium", "low"],
+        required: false,
+      },
+      allowVisits: {
+        type: String,
+        enum: ["yes", "no"],
+        required: false,
+      },
+      acceptSterilization: {
+        type: String,
+        enum: ["yes", "no"],
+        required: false,
+      },
+      housing: {
+        type: String,
+        enum: ["Casa urbana", "Casa de campo", "Departamento", "Quinta", "Hacienda", "Otro"],
+        required: false,
+      },
+      relationAnimals: {
+        type: String,
+        enum: ["positive", "neutral", "negative"],
+        required: false,
+      },
+      travelPlans: {
+        type: String,
+        enum: ["withOwner", "withFamily", "withFriend", "paidCaretaker", "hotel", "other"],
+        required: false,
+      },
+      behaviorResponse: {
+        type: String,
+        enum: ["trainOrAccept", "seekHelp", "punish", "abandon"],
+        required: false,
+      },
+      careCommitment: {
+        type: String,
+        enum: ["fullCare", "mediumCare", "lowCare"],
+        required: false,
+      },
     },
 
     status: {
