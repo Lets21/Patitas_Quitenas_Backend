@@ -23,7 +23,7 @@ export async function uploadToCloudinary(
           { fetch_format: "auto" }
         ],
       },
-      (error, result) => {
+      (error: any, result: any) => {
         if (error) {
           console.error("[Cloudinary] Error uploading:", error);
           reject(error);

@@ -37,6 +37,7 @@ export interface ApplicationDoc extends Document {
   scorePct: number;
   scoreDetail: Record<string, { value: any; contribution: number }>;
   eligible: boolean;
+  rejectReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -132,6 +133,11 @@ const ApplicationSchema = new Schema<ApplicationDoc>(
       type: Boolean,
       default: false,
       index: true,
+    },
+    rejectReason: {
+      type: String,
+      trim: true,
+      required: false,
     },
   },
   {
