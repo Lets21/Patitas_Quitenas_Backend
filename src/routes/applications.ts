@@ -794,4 +794,43 @@ router.get("/ranking", requireAuth, async (req: Request, res: Response, next: Ne
   }
 });
 
+// GET /api/v1/applications/:id (FUNDACION/ADMIN)
+router.get("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const u: any = (req as any).user || {};
+    const role = u.role;
+    const { id } = req.params;
+
+    const app = await Application.findById(id)
+      .populate({
+        path: "animalId",
+        select: "name photos attributes",
+        options: { strictPopulate: false }
+      })
+      .populate({
+        path: "adopterId",
+        select: "email profile",
+        options: { strictPopulate: false }
+      })
+      .lean();
+
+    if (!app) {
+      return res.status(404).json({ error: "Solicitud no encontrada" });
+    }
+
+    // Si es FUNDACION, verificar que la solicitud pertenece a su fundación
+    if (role === "FUNDACION") {
+      const foundationId = u.id || u._id || u.sub;
+      const appFoundationId = app.foundationId?.toString();
+      if (appFoundationId !== foundationId.toString()) {
+        return res.status(403).json({ error: "No tienes permiso para ver esta solicitud" });
+      }
+    }
+
+    res.json(app);
+  } catch (e) {
+    next(e);
+  }
+});
+
 export default router;
