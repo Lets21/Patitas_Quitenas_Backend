@@ -165,23 +165,27 @@ class EmailService {
     }
 
     try {
+      // Usar puerto 465 con SSL directo si es el puerto por defecto
+      const useSSL = emailPort === 465;
+      
       this.transporter = nodemailer.createTransport({
         host: emailHost,
         port: emailPort,
-        secure: false, // usar STARTTLS
+        secure: useSSL, // true para 465, false para otros puertos
         auth: {
           user: emailUser,
           pass: emailPass,
         },
         tls: {
-          ciphers: 'SSLv3',
           rejectUnauthorized: false
         },
-        requireTLS: true
+        connectionTimeout: 10000, // 10 segundos
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
       });
 
       console.log("✅ Servicio de email configurado correctamente");
-      console.log("   Transporter creado con éxito");
+      console.log(`   Transporter creado con éxito (Puerto: ${emailPort}, SSL: ${useSSL})`);
     } catch (error: any) {
       console.error("❌ Error al configurar el servicio de email:");
       console.error("   Mensaje:", error.message);
