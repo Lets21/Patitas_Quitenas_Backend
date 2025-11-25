@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { verifyJWT } from "../middleware/verifyJWT";
 import { scoreApplication } from "../services/scoring/scoreApplication";
+import { emailService } from "../services/emailService";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -217,6 +218,48 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
       foundationId: created.foundationId,
       adopterId: created.adopterId,
     });
+
+    // Enviar notificaciones por email (no bloqueantes)
+    Promise.all([
+      // 1. Email al adoptante: confirmación de envío
+      (async () => {
+        try {
+          const adopter = await User.findById(adopterId).lean();
+          if (adopter) {
+            await emailService.sendApplicationSubmittedEmail({
+              to: adopter.email,
+              adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
+              animalName: (animal as any).name || "Animal",
+              applicationId: String(created._id),
+              score: pct,
+            });
+          }
+        } catch (err) {
+          console.error("Error enviando email al adoptante:", err);
+        }
+      })(),
+      
+      // 2. Email a la fundación: nueva solicitud recibida
+      (async () => {
+        try {
+          const foundation = await User.findById(foundationId).lean();
+          const adopter = await User.findById(adopterId).lean();
+          if (foundation && adopter) {
+            await emailService.sendNewApplicationToFoundation({
+              to: foundation.email,
+              foundationName: foundation.foundationName || foundation.profile.firstName,
+              adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
+              adopterEmail: adopter.email,
+              animalName: (animal as any).name || "Animal",
+              applicationId: String(created._id),
+              score: pct,
+            });
+          }
+        } catch (err) {
+          console.error("Error enviando email a la fundación:", err);
+        }
+      })(),
+    ]).catch(err => console.error("Error en envío de emails:", err));
 
     res.status(201).json({ application: created });
   } catch (err) {
@@ -609,12 +652,71 @@ router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunct
 router.patch("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, notes } = req.body || {};
+    
+    // Obtener estado anterior
+    const oldApp = await Application.findById(req.params.id).lean();
+    if (!oldApp) return res.status(404).json({ error: "Solicitud no encontrada" });
+    
+    const oldStatus = oldApp.status;
+    
     const updated = await Application.findByIdAndUpdate(
       req.params.id,
       { $set: { status, "form.notes": notes } },
       { new: true }
     );
+    
     if (!updated) return res.status(404).json({ error: "Solicitud no encontrada" });
+    
+    // Enviar notificaciones solo si el estado cambió
+    if (status && oldStatus !== status) {
+      (async () => {
+        try {
+          const [adopter, animal, foundation] = await Promise.all([
+            User.findById(updated.adopterId).lean(),
+            Animal.findById(updated.animalId).lean(),
+            User.findById(updated.foundationId).lean(),
+          ]);
+          
+          if (adopter && animal) {
+            const animalName = (animal as any).name || "Animal";
+            const adopterName = `${adopter.profile.firstName} ${adopter.profile.lastName}`;
+            const applicationId = String(updated._id);
+            
+            // Email específico según el nuevo estado
+            if (status === "APPROVED") {
+              await emailService.sendApplicationApprovedEmail({
+                to: adopter.email,
+                adopterName,
+                animalName,
+                applicationId,
+                foundationContact: foundation?.email,
+              });
+            } else if (status === "REJECTED") {
+              await emailService.sendApplicationRejectedEmail({
+                to: adopter.email,
+                adopterName,
+                animalName,
+                applicationId,
+                reason: updated.rejectReason,
+              });
+            } else {
+              // Otros cambios de estado (IN_REVIEW, HOME_VISIT, etc.)
+              await emailService.sendApplicationStatusChangeEmail({
+                to: adopter.email,
+                adopterName,
+                animalName,
+                applicationId,
+                oldStatus,
+                newStatus: status,
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Error enviando notificación de cambio de estado:", err);
+        }
+      })().catch(err => console.error("Error en proceso de notificación:", err));
+    }
+    
     res.json(updated);
   } catch (e) { next(e); }
 });
@@ -642,9 +744,32 @@ router.patch("/:id/reject", verifyJWT, requireRole("FUNDACION"), async (req: Req
       return res.status(403).json({ error: "No tienes permiso para rechazar esta solicitud" });
     }
 
+    const oldStatus = app.status;
     app.status = "REJECTED";
     app.rejectReason = reason.trim();
     await app.save();
+
+    // Enviar email de rechazo al adoptante
+    (async () => {
+      try {
+        const [adopter, animal] = await Promise.all([
+          User.findById(app.adopterId).lean(),
+          Animal.findById(app.animalId).lean(),
+        ]);
+        
+        if (adopter && animal) {
+          await emailService.sendApplicationRejectedEmail({
+            to: adopter.email,
+            adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
+            animalName: (animal as any).name || "Animal",
+            applicationId: String(app._id),
+            reason: reason.trim(),
+          });
+        }
+      } catch (err) {
+        console.error("Error enviando email de rechazo:", err);
+      }
+    })().catch(err => console.error("Error en notificación de rechazo:", err));
 
     return res.json({ ok: true, message: "Solicitud rechazada correctamente" });
   } catch (e) {

@@ -19,6 +19,7 @@
     "node": "20.x"
   },
   "dependencies": {
+    "@types/nodemailer": "^7.0.4",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",
@@ -28,6 +29,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.3",
     "multer": "^2.0.2",
+    "nodemailer": "^7.0.6",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

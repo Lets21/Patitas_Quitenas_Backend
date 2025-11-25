@@ -19,6 +19,7 @@ import foundationRoutes from "./routes/foundation";
 import adminRoutes from "./routes/admin";
 import foundationAnimalsRoutes from "./routes/foundation.animals";
 import applicationsRouter from "./routes/applications";
+import contactRouter from "./routes/contact";
 
 const app = express();
 
@@ -72,6 +73,15 @@ app.get("/api/v1/health", (_req, res) => res.json({ ok: true }));
 // Público
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/animals", animalsRoutes); // catálogo público
+
+// Contacto (POST público, GET/PATCH/DELETE requieren auth)
+app.use("/api/v1/contact", (req, res, next) => {
+  // POST es público, los demás métodos requieren autenticación de admin
+  if (req.method === "POST") {
+    return next();
+  }
+  return requireAuth(req, res, () => requireRole("ADMIN")(req, res, next));
+}, contactRouter);
 
 // Protegidas por rol
 app.use("/api/v1/users", requireAuth, usersRouter);

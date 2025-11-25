@@ -2,6 +2,7 @@ import { Router } from "express";
 import { User } from "../models/User";
 import { signJwt } from "../utils/jwt";
 import bcrypt from "bcryptjs";
+import { emailService } from "../services/emailService";
 
 const router = Router();
 
@@ -101,6 +102,12 @@ router.post("/register", async (req, res) => {
       clinicName: role === "CLINICA" ? clinicName : undefined,
     });
     await user.save();
+
+    // Enviar email de bienvenida (no bloqueante)
+    emailService.sendWelcomeEmail({
+      to: user.email,
+      name: `${profile.firstName} ${profile.lastName}`,
+    }).catch((err: unknown) => console.error("Error al enviar email de bienvenida:", err));
 
     // no devolver password
     const safeUser = await User.findById(user._id).lean();
