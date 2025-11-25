@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
+import { Resend } from "resend";
 
 interface EmailOptions {
   to: string;
@@ -10,10 +11,12 @@ interface EmailOptions {
 
 class EmailService {
   private transporter: Transporter | null = null;
+  private resend: Resend | null = null;
+  private useResend: boolean = false;
   private readonly LOGO_URL = "https://res.cloudinary.com/dctbi0fol/image/upload/v1764096455/emails/logo_huellitas.png";
 
   constructor() {
-    this.initializeTransporter();
+    this.initializeEmailService();
   }
 
   /**
@@ -142,15 +145,31 @@ class EmailService {
     `;
   }
 
-  private initializeTransporter() {
+  private initializeEmailService() {
     console.log('🔧 Inicializando EmailService...');
     
+    // Prioridad 1: Intentar Resend (mejor para hosting en la nube)
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey) {
+      try {
+        this.resend = new Resend(resendApiKey);
+        this.useResend = true;
+        console.log("✅ Servicio de email configurado con Resend");
+        console.log("   API Key:", resendApiKey.substring(0, 10) + "...");
+        return;
+      } catch (error: any) {
+        console.error("❌ Error al configurar Resend:", error.message);
+        console.log("   Intentando fallback a SMTP...");
+      }
+    }
+
+    // Fallback: Usar SMTP tradicional (Gmail)
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASSWORD;
     const emailHost = process.env.EMAIL_HOST || "smtp.gmail.com";
     const emailPort = parseInt(process.env.EMAIL_PORT || "587");
 
-    console.log('📋 Configuración de email:');
+    console.log('📋 Configuración de email SMTP:');
     console.log('   - EMAIL_USER:', emailUser ? `✓ ${emailUser}` : '✗ NO configurado');
     console.log('   - EMAIL_PASSWORD:', emailPass ? `✓ Configurado (${emailPass.length} caracteres)` : '✗ NO configurado');
     console.log('   - EMAIL_HOST:', emailHost);
@@ -159,19 +178,18 @@ class EmailService {
 
     if (!emailUser || !emailPass) {
       console.error(
-        "❌ CRITICAL: EMAIL_USER o EMAIL_PASSWORD no configurados. El envío de correos está deshabilitado."
+        "❌ CRITICAL: Ni RESEND_API_KEY ni EMAIL_USER/EMAIL_PASSWORD configurados. El envío de correos está deshabilitado."
       );
       return;
     }
 
     try {
-      // Usar puerto 465 con SSL directo si es el puerto por defecto
       const useSSL = emailPort === 465;
       
       this.transporter = nodemailer.createTransport({
         host: emailHost,
         port: emailPort,
-        secure: useSSL, // true para 465, false para otros puertos
+        secure: useSSL,
         auth: {
           user: emailUser,
           pass: emailPass,
@@ -179,34 +197,76 @@ class EmailService {
         tls: {
           rejectUnauthorized: false
         },
-        connectionTimeout: 10000, // 10 segundos
+        connectionTimeout: 10000,
         greetingTimeout: 10000,
         socketTimeout: 10000,
       });
 
-      console.log("✅ Servicio de email configurado correctamente");
-      console.log(`   Transporter creado con éxito (Puerto: ${emailPort}, SSL: ${useSSL})`);
+      console.log("✅ Servicio de email configurado con SMTP");
+      console.log(`   Transporter creado (Puerto: ${emailPort}, SSL: ${useSSL})`);
     } catch (error: any) {
-      console.error("❌ Error al configurar el servicio de email:");
-      console.error("   Mensaje:", error.message);
-      console.error("   Stack:", error.stack);
+      console.error("❌ Error al configurar SMTP:", error.message);
     }
   }
 
   async sendEmail(options: EmailOptions): Promise<boolean> {
     console.log('🔍 sendEmail llamado con:', { to: options.to, subject: options.subject });
     
-    if (!this.transporter) {
-      console.error("❌ CRITICAL: Email no enviado - transporter no configurado");
-      console.error("   Variables de entorno:");
-      console.error("   - EMAIL_USER:", process.env.EMAIL_USER ? '✓ Configurado' : '✗ NO configurado');
-      console.error("   - EMAIL_PASSWORD:", process.env.EMAIL_PASSWORD ? '✓ Configurado' : '✗ NO configurado');
-      console.error("   - EMAIL_HOST:", process.env.EMAIL_HOST || 'smtp.gmail.com (default)');
-      console.error("   - EMAIL_PORT:", process.env.EMAIL_PORT || '587 (default)');
+    // Usar Resend si está disponible
+    if (this.useResend && this.resend) {
+      return this.sendEmailWithResend(options);
+    }
+
+    // Fallback a SMTP
+    return this.sendEmailWithSMTP(options);
+  }
+
+  private async sendEmailWithResend(options: EmailOptions): Promise<boolean> {
+    if (!this.resend) {
+      console.error("❌ Resend no configurado");
       return false;
     }
 
-    console.log('✓ Transporter existe, intentando enviar...');
+    console.log('✓ Usando Resend para enviar email...');
+
+    try {
+      const fromEmail = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_USER || "onboarding@resend.dev";
+      const fromName = process.env.EMAIL_FROM_NAME || "Huellitas Quiteñas";
+
+      console.log('📤 Enviando email desde:', `${fromName} <${fromEmail}>`);
+      console.log('📬 Enviando email hacia:', options.to);
+
+      const result = await this.resend.emails.send({
+        from: `${fromName} <${fromEmail}>`,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      });
+
+      if (result.error) {
+        console.error("❌ Error de Resend:", result.error);
+        return false;
+      }
+
+      console.log("✅ Email enviado exitosamente con Resend!");
+      console.log("   Email ID:", result.data?.id);
+      return true;
+    } catch (error: any) {
+      console.error("❌ ERROR al enviar email con Resend:");
+      console.error("   Mensaje:", error.message);
+      console.error("   Stack:", error.stack);
+      return false;
+    }
+  }
+
+  private async sendEmailWithSMTP(options: EmailOptions): Promise<boolean> {
+    if (!this.transporter) {
+      console.error("❌ CRITICAL: SMTP no configurado");
+      return false;
+    }
+
+    console.log('✓ Usando SMTP para enviar email...');
     
     try {
       const mailOptions = {
@@ -222,19 +282,14 @@ class EmailService {
       
       const info = await this.transporter.sendMail(mailOptions);
 
-      console.log("✅ Email enviado exitosamente!");
+      console.log("✅ Email enviado exitosamente con SMTP!");
       console.log("   Message ID:", info.messageId);
-      console.log("   Response:", info.response);
       return true;
     } catch (error: any) {
-      console.error("❌ ERROR al enviar email:");
+      console.error("❌ ERROR al enviar email con SMTP:");
       console.error("   Mensaje:", error.message);
       console.error("   Código:", error.code);
       console.error("   Command:", error.command);
-      if (error.response) {
-        console.error("   Response:", error.response);
-      }
-      console.error("   Stack completo:", error.stack);
       return false;
     }
   }
