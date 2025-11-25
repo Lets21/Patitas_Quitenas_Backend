@@ -143,14 +143,23 @@ class EmailService {
   }
 
   private initializeTransporter() {
+    console.log('🔧 Inicializando EmailService...');
+    
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASSWORD;
     const emailHost = process.env.EMAIL_HOST || "smtp.gmail.com";
     const emailPort = parseInt(process.env.EMAIL_PORT || "587");
 
+    console.log('📋 Configuración de email:');
+    console.log('   - EMAIL_USER:', emailUser ? `✓ ${emailUser}` : '✗ NO configurado');
+    console.log('   - EMAIL_PASSWORD:', emailPass ? `✓ Configurado (${emailPass.length} caracteres)` : '✗ NO configurado');
+    console.log('   - EMAIL_HOST:', emailHost);
+    console.log('   - EMAIL_PORT:', emailPort);
+    console.log('   - EMAIL_FROM_NAME:', process.env.EMAIL_FROM_NAME || 'Huellitas Quiteñas (default)');
+
     if (!emailUser || !emailPass) {
-      console.warn(
-        "⚠️  EMAIL_USER o EMAIL_PASSWORD no configurados. El envío de correos está deshabilitado."
+      console.error(
+        "❌ CRITICAL: EMAIL_USER o EMAIL_PASSWORD no configurados. El envío de correos está deshabilitado."
       );
       return;
     }
@@ -172,30 +181,56 @@ class EmailService {
       });
 
       console.log("✅ Servicio de email configurado correctamente");
-    } catch (error) {
-      console.error("❌ Error al configurar el servicio de email:", error);
+      console.log("   Transporter creado con éxito");
+    } catch (error: any) {
+      console.error("❌ Error al configurar el servicio de email:");
+      console.error("   Mensaje:", error.message);
+      console.error("   Stack:", error.stack);
     }
   }
 
   async sendEmail(options: EmailOptions): Promise<boolean> {
+    console.log('🔍 sendEmail llamado con:', { to: options.to, subject: options.subject });
+    
     if (!this.transporter) {
-      console.warn("Email no enviado: transporter no configurado");
+      console.error("❌ CRITICAL: Email no enviado - transporter no configurado");
+      console.error("   Variables de entorno:");
+      console.error("   - EMAIL_USER:", process.env.EMAIL_USER ? '✓ Configurado' : '✗ NO configurado');
+      console.error("   - EMAIL_PASSWORD:", process.env.EMAIL_PASSWORD ? '✓ Configurado' : '✗ NO configurado');
+      console.error("   - EMAIL_HOST:", process.env.EMAIL_HOST || 'smtp.gmail.com (default)');
+      console.error("   - EMAIL_PORT:", process.env.EMAIL_PORT || '587 (default)');
       return false;
     }
 
+    console.log('✓ Transporter existe, intentando enviar...');
+    
     try {
-      const info = await this.transporter.sendMail({
+      const mailOptions = {
         from: `"${process.env.EMAIL_FROM_NAME || "Huellitas Quiteñas"}" <${process.env.EMAIL_USER}>`,
         to: options.to,
         subject: options.subject,
         text: options.text,
         html: options.html,
-      });
+      };
+      
+      console.log('📤 Enviando email desde:', mailOptions.from);
+      console.log('📬 Enviando email hacia:', mailOptions.to);
+      
+      const info = await this.transporter.sendMail(mailOptions);
 
-      console.log("✅ Email enviado:", info.messageId);
+      console.log("✅ Email enviado exitosamente!");
+      console.log("   Message ID:", info.messageId);
+      console.log("   Response:", info.response);
       return true;
-    } catch (error) {
-      console.error("❌ Error al enviar email:", error);
+    } catch (error: any) {
+      console.error("❌ ERROR al enviar email:");
+      console.error("   Mensaje:", error.message);
+      console.error("   Código:", error.code);
+      console.error("   Command:", error.command);
+      if (error.response) {
+        console.error("   Response:", error.response);
+      }
+      console.error("   Stack completo:", error.stack);
       return false;
     }
   }

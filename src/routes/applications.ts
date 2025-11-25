@@ -220,32 +220,42 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
     });
 
     // Enviar notificaciones por email (no bloqueantes)
+    console.log('📧 Iniciando envío de notificaciones por email...');
     Promise.all([
       // 1. Email al adoptante: confirmación de envío
       (async () => {
         try {
+          console.log('📨 Preparando email para adoptante...');
           const adopter = await User.findById(adopterId).lean();
           if (adopter) {
-            await emailService.sendApplicationSubmittedEmail({
+            console.log(`📨 Enviando email a adoptante: ${adopter.email}`);
+            const result = await emailService.sendApplicationSubmittedEmail({
               to: adopter.email,
               adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
               animalName: (animal as any).name || "Animal",
               applicationId: String(created._id),
               score: pct,
             });
+            console.log(result ? '✅ Email enviado a adoptante' : '❌ Fallo al enviar email a adoptante');
+          } else {
+            console.log('⚠️  No se encontró el adoptante para enviar email');
           }
-        } catch (err) {
-          console.error("Error enviando email al adoptante:", err);
+        } catch (err: any) {
+          console.error("❌ Error enviando email al adoptante:");
+          console.error("  Mensaje:", err.message);
+          console.error("  Stack:", err.stack);
         }
       })(),
       
       // 2. Email a la fundación: nueva solicitud recibida
       (async () => {
         try {
+          console.log('📨 Preparando email para fundación...');
           const foundation = await User.findById(foundationId).lean();
           const adopter = await User.findById(adopterId).lean();
           if (foundation && adopter) {
-            await emailService.sendNewApplicationToFoundation({
+            console.log(`📨 Enviando email a fundación: ${foundation.email}`);
+            const result = await emailService.sendNewApplicationToFoundation({
               to: foundation.email,
               foundationName: foundation.foundationName || foundation.profile.firstName,
               adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
@@ -254,12 +264,19 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
               applicationId: String(created._id),
               score: pct,
             });
+            console.log(result ? '✅ Email enviado a fundación' : '❌ Fallo al enviar email a fundación');
+          } else {
+            console.log('⚠️  No se encontró la fundación o adoptante para enviar email');
           }
-        } catch (err) {
-          console.error("Error enviando email a la fundación:", err);
+        } catch (err: any) {
+          console.error("❌ Error enviando email a la fundación:");
+          console.error("  Mensaje:", err.message);
+          console.error("  Stack:", err.stack);
         }
       })(),
-    ]).catch(err => console.error("Error en envío de emails:", err));
+    ]).catch(err => {
+      console.error("❌ Error general en envío de emails:", err);
+    });
 
     res.status(201).json({ application: created });
   } catch (err) {
