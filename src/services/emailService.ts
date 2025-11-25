@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { Resend } from "resend";
+import sgMail from "@sendgrid/mail";
 
 interface EmailOptions {
   to: string;
@@ -9,10 +10,12 @@ interface EmailOptions {
   text?: string;
 }
 
+type EmailProvider = "sendgrid" | "resend" | "smtp" | "none";
+
 class EmailService {
   private transporter: Transporter | null = null;
   private resend: Resend | null = null;
-  private useResend: boolean = false;
+  private provider: EmailProvider = "none";
   private readonly LOGO_URL = "https://res.cloudinary.com/dctbi0fol/image/upload/v1764096455/emails/logo_huellitas.png";
 
   constructor() {
@@ -147,41 +150,60 @@ class EmailService {
 
   private initializeEmailService() {
     console.log('🔧 Inicializando EmailService...');
+    console.log('📋 Verificando proveedores de email disponibles...');
     
-    // Prioridad 1: Intentar Resend (mejor para hosting en la nube)
+    // Prioridad 1: SendGrid (funciona sin dominio propio, 100 emails/día gratis)
+    const sendgridApiKey = process.env.SENDGRID_API_KEY;
+    if (sendgridApiKey) {
+      try {
+        sgMail.setApiKey(sendgridApiKey);
+        this.provider = "sendgrid";
+        console.log("✅ Servicio de email configurado con SendGrid");
+        console.log("   ℹ️  SendGrid permite enviar a CUALQUIER email sin restricciones");
+        console.log("   API Key:", sendgridApiKey.substring(0, 12) + "...");
+        return;
+      } catch (error: any) {
+        console.error("❌ Error al configurar SendGrid:", error.message);
+        console.log("   Intentando siguiente proveedor...");
+      }
+    }
+
+    // Prioridad 2: Resend (requiere dominio verificado, 3000 emails/mes gratis)
     const resendApiKey = process.env.RESEND_API_KEY;
     if (resendApiKey) {
       try {
         this.resend = new Resend(resendApiKey);
-        this.useResend = true;
+        this.provider = "resend";
         console.log("✅ Servicio de email configurado con Resend");
+        console.log("   ⚠️  Resend requiere dominio verificado para enviar a cualquier email");
         console.log("   API Key:", resendApiKey.substring(0, 10) + "...");
         return;
       } catch (error: any) {
         console.error("❌ Error al configurar Resend:", error.message);
-        console.log("   Intentando fallback a SMTP...");
+        console.log("   Intentando siguiente proveedor...");
       }
     }
 
-    // Fallback: Usar SMTP tradicional (Gmail)
+    // Prioridad 3: SMTP tradicional (Gmail) - puede estar bloqueado en Render
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASSWORD;
     const emailHost = process.env.EMAIL_HOST || "smtp.gmail.com";
     const emailPort = parseInt(process.env.EMAIL_PORT || "587");
 
-    console.log('📋 Configuración de email SMTP:');
-    console.log('   - EMAIL_USER:', emailUser ? `✓ ${emailUser}` : '✗ NO configurado');
-    console.log('   - EMAIL_PASSWORD:', emailPass ? `✓ Configurado (${emailPass.length} caracteres)` : '✗ NO configurado');
-    console.log('   - EMAIL_HOST:', emailHost);
-    console.log('   - EMAIL_PORT:', emailPort);
-    console.log('   - EMAIL_FROM_NAME:', process.env.EMAIL_FROM_NAME || 'Huellitas Quiteñas (default)');
-
     if (!emailUser || !emailPass) {
-      console.error(
-        "❌ CRITICAL: Ni RESEND_API_KEY ni EMAIL_USER/EMAIL_PASSWORD configurados. El envío de correos está deshabilitado."
-      );
+      console.error("❌ CRITICAL: Ningún proveedor de email configurado.");
+      console.error("   Opciones disponibles:");
+      console.error("   1. SENDGRID_API_KEY (recomendado para Render)");
+      console.error("   2. RESEND_API_KEY (requiere dominio verificado)");
+      console.error("   3. EMAIL_USER + EMAIL_PASSWORD (puede estar bloqueado en Render)");
       return;
     }
+
+    console.log('📋 Intentando configurar SMTP:');
+    console.log('   - EMAIL_USER:', emailUser);
+    console.log('   - EMAIL_HOST:', emailHost);
+    console.log('   - EMAIL_PORT:', emailPort);
+    console.log('   ⚠️  SMTP puede estar bloqueado en plataformas cloud como Render');
 
     try {
       const useSSL = emailPort === 465;
@@ -202,8 +224,9 @@ class EmailService {
         socketTimeout: 10000,
       });
 
-      console.log("✅ Servicio de email configurado con SMTP");
-      console.log(`   Transporter creado (Puerto: ${emailPort}, SSL: ${useSSL})`);
+      this.provider = "smtp";
+      console.log("✅ SMTP configurado");
+      console.log(`   Puerto: ${emailPort}, SSL: ${useSSL}`);
     } catch (error: any) {
       console.error("❌ Error al configurar SMTP:", error.message);
     }
@@ -211,14 +234,53 @@ class EmailService {
 
   async sendEmail(options: EmailOptions): Promise<boolean> {
     console.log('🔍 sendEmail llamado con:', { to: options.to, subject: options.subject });
+    console.log('   Proveedor activo:', this.provider);
     
-    // Usar Resend si está disponible
-    if (this.useResend && this.resend) {
-      return this.sendEmailWithResend(options);
+    switch (this.provider) {
+      case "sendgrid":
+        return this.sendEmailWithSendGrid(options);
+      case "resend":
+        return this.sendEmailWithResend(options);
+      case "smtp":
+        return this.sendEmailWithSMTP(options);
+      default:
+        console.error("❌ No hay proveedor de email configurado");
+        return false;
     }
+  }
 
-    // Fallback a SMTP
-    return this.sendEmailWithSMTP(options);
+  private async sendEmailWithSendGrid(options: EmailOptions): Promise<boolean> {
+    console.log('✓ Usando SendGrid para enviar email...');
+
+    try {
+      const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER || "noreply@example.com";
+      const fromName = process.env.EMAIL_FROM_NAME || "Huellitas Quiteñas";
+
+      console.log('📤 Enviando email desde:', `${fromName} <${fromEmail}>`);
+      console.log('📬 Enviando email hacia:', options.to);
+
+      await sgMail.send({
+        from: {
+          email: fromEmail,
+          name: fromName,
+        },
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text || options.subject,
+      });
+
+      console.log("✅ Email enviado exitosamente con SendGrid!");
+      return true;
+    } catch (error: any) {
+      console.error("❌ ERROR al enviar email con SendGrid:");
+      console.error("   Mensaje:", error.message);
+      if (error.response) {
+        console.error("   Response body:", error.response.body);
+      }
+      console.error("   Stack:", error.stack);
+      return false;
+    }
   }
 
   private async sendEmailWithResend(options: EmailOptions): Promise<boolean> {
