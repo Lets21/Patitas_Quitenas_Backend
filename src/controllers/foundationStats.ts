@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { Animal } from "../models/Animal";
+import { Application } from "../models/Application";
 
 // Estados considerados "todavía en la fundación / en proceso"
 const WAITING_STATES = ["AVAILABLE", "RESERVED", "RESCUED", "QUARANTINE"];
@@ -10,7 +11,7 @@ export async function getFoundationStats(
   next: NextFunction
 ) {
   try {
-    const foundationId = req.user!.id;
+    const foundationId = (req.user as any).id;
 
     // Total perros registrados por esta fundación
     const totalDogs = await Animal.countDocuments({ foundationId });
@@ -27,8 +28,12 @@ export async function getFoundationStats(
       state: "ADOPTED",
     });
 
-    // Solicitudes activas de adopción (cuando tengan ese modelo lo conectamos)
-    const activeRequests = 0;
+    // Solicitudes activas de adopción
+    // Se consideran activas: RECIBIDA, IN_REVIEW, HOME_VISIT
+    const activeRequests = await Application.countDocuments({
+      foundationId,
+      status: { $in: ["RECIBIDA", "IN_REVIEW", "HOME_VISIT"] },
+    });
 
     return res.json({
       ok: true,
