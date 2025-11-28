@@ -268,6 +268,9 @@ class EmailService {
         subject: options.subject,
         html: options.html,
         text: options.text || options.subject,
+        trackingSettings: {
+          clickTracking: { enable: false, enableText: false }
+        }
       });
 
       console.log("✅ Email enviado exitosamente con SendGrid!");
