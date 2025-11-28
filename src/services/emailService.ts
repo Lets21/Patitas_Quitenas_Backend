@@ -553,7 +553,7 @@ ${data.message}
               </ul>
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/catalog" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
+                <a href="https://huellitasquitenas.vercel.app/catalog" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
                   Ver Animales Disponibles
                 </a>
               </div>
@@ -572,7 +572,7 @@ ${data.message}
             <div class="footer">
               <p style="margin: 0 0 10px 0; color: #4b5563;">Este es un correo automático, por favor no responder directamente.</p>
               <p style="margin: 0; color: #374151;">
-                <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}" style="color: #4F46E5; text-decoration: none; font-weight: 600;">Huellitas Quiteñas</a> © ${new Date().getFullYear()}
+                <a href="https://huellitasquitenas.vercel.app" style="color: #4F46E5; text-decoration: none; font-weight: 600;">Huellitas Quiteñas</a> © ${new Date().getFullYear()}
               </p>
               <p style="margin: 10px 0 0 0; font-size: 12px; color: #6b7280;">
                 Protegiendo y cuidando a nuestros amigos de cuatro patas 🐾
@@ -673,7 +673,7 @@ El equipo de Huellitas Quiteñas
               </div>
 
               <div style="text-align: center; margin: 20px 0;">
-                <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/mis-solicitudes" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
+                <a href="https://huellitasquitenas.vercel.app/mis-solicitudes" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
                   📱 Ver Estado de mi Solicitud
                 </a>
               </div>
@@ -798,7 +798,7 @@ El equipo de Huellitas Quiteñas
               }
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/mis-solicitudes" style="display: inline-block; padding: 14px 32px; background-color: #10B981; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
+                <a href="https://huellitasquitenas.vercel.app/mis-solicitudes" style="display: inline-block; padding: 14px 32px; background-color: #10B981; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
                   Ver Detalles de mi Adopción
                 </a>
               </div>
@@ -1161,7 +1161,7 @@ El equipo de Huellitas Quiteñas
               </div>
 
               <div style="text-align: center; margin: 35px 0;">
-                <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/fundacion/solicitudes" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
+                <a href="https://huellitasquitenas.vercel.app/fundacion/solicitudes" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
                   📋 Revisar Solicitud Ahora
                 </a>
               </div>
@@ -1294,7 +1294,7 @@ El equipo de Huellitas Quiteñas
               </div>
 
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/admin/contacto" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
+                <a href="https://huellitasquitenas.vercel.app/admin/contacto" style="display: inline-block; padding: 14px 32px; background-color: #4F46E5; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; font-family: Arial, sans-serif;">
                   Ver en Panel de Administración
                 </a>
               </div>
