@@ -43,7 +43,7 @@ const validateName = (name: string): boolean => {
 // Registro
 router.post("/register", async (req, res) => {
   try {
-    const { email, password, role, profile, foundationName, clinicName } = req.body;
+    const { email, password, role, profile, foundationName, clinicName, preferences } = req.body;
 
     // Validación de email
     if (!email || !validateEmail(email)) {
@@ -96,6 +96,8 @@ router.post("/register", async (req, res) => {
         lastName: profile.lastName.trim(),
         phone: profile.phone?.trim(),
         address: profile.address?.trim(),
+        // Agregar preferencias dentro de profile si es ADOPTANTE y vienen en el body
+        preferences: role === "ADOPTANTE" && preferences ? preferences : undefined,
       },
       status: "ACTIVE",
       foundationName: role === "FUNDACION" ? foundationName : undefined,
