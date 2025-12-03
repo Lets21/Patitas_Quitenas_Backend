@@ -2,6 +2,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import { Animal } from "../models/Animal"; // sin .js en TS
+import { MedicalHistory } from "../models/MedicalHistory";
 
 const router = Router();
 
@@ -96,6 +97,30 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
 
     const animal = mapDocToDto(doc);
     res.json(animal);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/v1/animals/:id/medical-history
+ * Obtener historial médico público de un animal
+ * Endpoint público para mostrar en la página de detalle del animal
+ */
+router.get("/:id/medical-history", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    const history = await MedicalHistory.findOne({ animalId: id })
+      .select("-clinicUserId -__v")
+      .lean();
+
+    // No es error si no existe, simplemente retornamos null
+    return res.json({ ok: true, data: history || null });
   } catch (err) {
     next(err);
   }
