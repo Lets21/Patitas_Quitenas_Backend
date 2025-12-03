@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth";
 import { requireRole } from "../middleware/requireRole";
 import { verifyJWT } from "../middleware/verifyJWT";
 import { scoreApplication } from "../services/scoring/scoreApplication";
+import { emailService } from "../services/emailService";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -216,6 +217,65 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
       _id: created._id,
       foundationId: created.foundationId,
       adopterId: created.adopterId,
+    });
+
+    // Enviar notificaciones por email (no bloqueantes)
+    console.log('📧 Iniciando envío de notificaciones por email...');
+    Promise.all([
+      // 1. Email al adoptante: confirmación de envío
+      (async () => {
+        try {
+          console.log('📨 Preparando email para adoptante...');
+          const adopter = await User.findById(adopterId).lean();
+          if (adopter) {
+            console.log(`📨 Enviando email a adoptante: ${adopter.email}`);
+            const result = await emailService.sendApplicationSubmittedEmail({
+              to: adopter.email,
+              adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
+              animalName: (animal as any).name || "Animal",
+              applicationId: String(created._id),
+              score: pct,
+            });
+            console.log(result ? '✅ Email enviado a adoptante' : '❌ Fallo al enviar email a adoptante');
+          } else {
+            console.log('⚠️  No se encontró el adoptante para enviar email');
+          }
+        } catch (err: any) {
+          console.error("❌ Error enviando email al adoptante:");
+          console.error("  Mensaje:", err.message);
+          console.error("  Stack:", err.stack);
+        }
+      })(),
+      
+      // 2. Email a la fundación: nueva solicitud recibida
+      (async () => {
+        try {
+          console.log('📨 Preparando email para fundación...');
+          const foundation = await User.findById(foundationId).lean();
+          const adopter = await User.findById(adopterId).lean();
+          if (foundation && adopter) {
+            console.log(`📨 Enviando email a fundación: ${foundation.email}`);
+            const result = await emailService.sendNewApplicationToFoundation({
+              to: foundation.email,
+              foundationName: foundation.foundationName || foundation.profile.firstName,
+              adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
+              adopterEmail: adopter.email,
+              animalName: (animal as any).name || "Animal",
+              applicationId: String(created._id),
+              score: pct,
+            });
+            console.log(result ? '✅ Email enviado a fundación' : '❌ Fallo al enviar email a fundación');
+          } else {
+            console.log('⚠️  No se encontró la fundación o adoptante para enviar email');
+          }
+        } catch (err: any) {
+          console.error("❌ Error enviando email a la fundación:");
+          console.error("  Mensaje:", err.message);
+          console.error("  Stack:", err.stack);
+        }
+      })(),
+    ]).catch(err => {
+      console.error("❌ Error general en envío de emails:", err);
     });
 
     res.status(201).json({ application: created });
@@ -609,12 +669,172 @@ router.get("/", requireAuth, async (req: Request, res: Response, next: NextFunct
 router.patch("/:id", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { status, notes } = req.body || {};
+    
+    // Obtener estado anterior
+    const oldApp = await Application.findById(req.params.id).lean();
+    if (!oldApp) return res.status(404).json({ error: "Solicitud no encontrada" });
+    
+    const oldStatus = oldApp.status;
+    
     const updated = await Application.findByIdAndUpdate(
       req.params.id,
       { $set: { status, "form.notes": notes } },
       { new: true }
     );
+
     if (!updated) return res.status(404).json({ error: "Solicitud no encontrada" });
+
+    // Obtener modelos
+    const { Notification } = require("../models/Notification");
+    const { User } = require("../models/User");
+    const { Animal } = require("../models/Animal");
+
+    // Obtener datos de animal y adoptante
+    const adopter = await User.findById(updated.adopterId).lean();
+    const animal = await Animal.findById(updated.animalId).lean();
+
+    // Si la solicitud fue aprobada, actualizar el estado del animal a 'ADOPTED'
+    if (status === "APPROVED") {
+      await Animal.findByIdAndUpdate(updated.animalId, { $set: { state: "ADOPTED" } });
+      // Notificación de adopción exitosa
+      try {
+        await Notification.create({
+          foundationId: updated.foundationId,
+          type: "adoption",
+          title: "Adopción exitosa",
+          message: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""} ha adoptado a ${animal?.name || ""}`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "medium",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación de adopción:", err);
+      }
+    }
+    // Si la solicitud fue rechazada
+    if (status === "REJECTED") {
+      await Animal.findByIdAndUpdate(updated.animalId, { $set: { state: "AVAILABLE" } });
+      // Notificación de rechazo
+      try {
+        await Notification.create({
+          foundationId: updated.foundationId,
+          type: "adoption",
+          title: "Solicitud rechazada",
+          message: `La solicitud de ${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""} para adoptar a ${animal?.name || ""} fue rechazada.`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "high",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación de rechazo:", err);
+      }
+    }
+    // Si la solicitud se pone en revisión
+    if (status === "IN_REVIEW") {
+      await Animal.findByIdAndUpdate(updated.animalId, { $set: { state: "AVAILABLE" } });
+      // Notificación de revisión
+      try {
+        await Notification.create({
+          foundationId: updated.foundationId,
+          type: "adoption",
+          title: "Solicitud en revisión",
+          message: `La solicitud de ${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""} para adoptar a ${animal?.name || ""} está en revisión.`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "medium",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación de revisión:", err);
+      }
+    }
+    // Si la solicitud pasa por clínica (ejemplo: HOME_VISIT)
+    if (status === "HOME_VISIT") {
+      // Notificación de visita domiciliaria/clínica
+      try {
+        await Notification.create({
+          foundationId: updated.foundationId,
+          type: "clinical",
+          title: "Visita domiciliaria programada",
+          message: `Se ha programado una visita domiciliaria para ${animal?.name || ""} (solicitante: ${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}).`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "medium",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación clínica:", err);
+      }
+    }
+    // Si la solicitud fue rechazada o puesta en revisión, actualizar el estado del animal a 'AVAILABLE'
+    if (status === "REJECTED" || status === "IN_REVIEW") {
+      await Animal.findByIdAndUpdate(updated.animalId, { $set: { state: "AVAILABLE" } });
+    }
+
+    // Enviar notificaciones solo si el estado cambió
+    if (status && oldStatus !== status) {
+      (async () => {
+        try {
+          const [adopter, animal, foundation] = await Promise.all([
+            User.findById(updated.adopterId).lean(),
+            Animal.findById(updated.animalId).lean(),
+            User.findById(updated.foundationId).lean(),
+          ]);
+
+          if (adopter && animal) {
+            const animalName = (animal as any).name || "Animal";
+            const adopterName = `${adopter.profile.firstName} ${adopter.profile.lastName}`;
+            const applicationId = String(updated._id);
+
+            // Email específico según el nuevo estado
+            if (status === "APPROVED") {
+              await emailService.sendApplicationApprovedEmail({
+                to: adopter.email,
+                adopterName,
+                animalName,
+                applicationId,
+                foundationContact: foundation?.email,
+              });
+            } else if (status === "REJECTED") {
+              await emailService.sendApplicationRejectedEmail({
+                to: adopter.email,
+                adopterName,
+                animalName,
+                applicationId,
+                reason: updated.rejectReason,
+              });
+            } else {
+              // Otros cambios de estado (IN_REVIEW, HOME_VISIT, etc.)
+              await emailService.sendApplicationStatusChangeEmail({
+                to: adopter.email,
+                adopterName,
+                animalName,
+                applicationId,
+                oldStatus,
+                newStatus: status,
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Error enviando notificación de cambio de estado:", err);
+        }
+      })().catch(err => console.error("Error en proceso de notificación:", err));
+    }
+
     res.json(updated);
   } catch (e) { next(e); }
 });
@@ -642,9 +862,32 @@ router.patch("/:id/reject", verifyJWT, requireRole("FUNDACION"), async (req: Req
       return res.status(403).json({ error: "No tienes permiso para rechazar esta solicitud" });
     }
 
+    const oldStatus = app.status;
     app.status = "REJECTED";
     app.rejectReason = reason.trim();
     await app.save();
+
+    // Enviar email de rechazo al adoptante
+    (async () => {
+      try {
+        const [adopter, animal] = await Promise.all([
+          User.findById(app.adopterId).lean(),
+          Animal.findById(app.animalId).lean(),
+        ]);
+        
+        if (adopter && animal) {
+          await emailService.sendApplicationRejectedEmail({
+            to: adopter.email,
+            adopterName: `${adopter.profile.firstName} ${adopter.profile.lastName}`,
+            animalName: (animal as any).name || "Animal",
+            applicationId: String(app._id),
+            reason: reason.trim(),
+          });
+        }
+      } catch (err) {
+        console.error("Error enviando email de rechazo:", err);
+      }
+    })().catch(err => console.error("Error en notificación de rechazo:", err));
 
     return res.json({ ok: true, message: "Solicitud rechazada correctamente" });
   } catch (e) {

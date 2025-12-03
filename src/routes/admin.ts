@@ -3,6 +3,7 @@ import { User } from "../models/User";
 import { Animal } from "../models/Animal";
 import { Application } from "../models/Application";
 import { SystemSettings } from "../models/SystemSettings";
+import { emailService } from "../services/emailService";
 
 const router = Router();
 
@@ -367,6 +368,9 @@ router.post(
         });
       }
 
+      // Para fundaciones/clínicas: permitir múltiples usuarios de la misma organización
+      // No validamos unicidad del nombre de organización
+      
       // Crear usuario
       const userData: any = {
         email,
@@ -698,5 +702,52 @@ router.put(
     }
   }
 );
+
+// POST /api/v1/admin/report-issue - Reportar problema técnico
+router.post("/report-issue", async (req, res) => {
+  try {
+    const { issueType, description, stackTrace } = req.body;
+    const user: any = (req as any).user || {};
+
+    // Validaciones
+    if (!issueType || !description) {
+      return res.status(400).json({
+        ok: false,
+        error: "Tipo de problema y descripción son requeridos",
+      });
+    }
+
+    // Obtener email del admin configurado
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+    
+    if (!adminEmail) {
+      console.warn("No hay email de administrador configurado para reportes");
+      return res.status(200).json({
+        ok: true,
+        message: "Reporte registrado (email no configurado)",
+      });
+    }
+
+    // Enviar alerta por email
+    await emailService.sendTechnicalIssueAlert({
+      to: adminEmail,
+      issueType,
+      description,
+      userEmail: user?.email,
+      stackTrace,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: "Problema reportado exitosamente. El equipo técnico ha sido notificado.",
+    });
+  } catch (error: any) {
+    console.error("Error al reportar problema:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error al enviar el reporte",
+    });
+  }
+});
 
 export default router;

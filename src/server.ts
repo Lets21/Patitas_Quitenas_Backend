@@ -19,6 +19,9 @@ import foundationRoutes from "./routes/foundation";
 import adminRoutes from "./routes/admin";
 import foundationAnimalsRoutes from "./routes/foundation.animals";
 import applicationsRouter from "./routes/applications";
+import contactRouter from "./routes/contact";
+import notificationsRouter from "./routes/notifications";
+import matchingRouter from "./routes/matching";
 
 const app = express();
 
@@ -73,12 +76,27 @@ app.get("/api/v1/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/animals", animalsRoutes); // catálogo público
 
+// Contacto (POST público, GET/PATCH/DELETE requieren auth)
+app.use("/api/v1/contact", (req, res, next) => {
+  // POST es público, los demás métodos requieren autenticación de admin
+  if (req.method === "POST") {
+    return next();
+  }
+  return requireAuth(req, res, () => requireRole("ADMIN")(req, res, next));
+}, contactRouter);
+
 // Protegidas por rol
 app.use("/api/v1/users", requireAuth, usersRouter);
 app.use("/api/v1/clinic", requireAuth, clinicRoutes);
 app.use("/api/v1/admin", requireAuth, requireRole("ADMIN"), adminRoutes);
 // Solicitudes de adopción
 app.use("/api/v1/applications", applicationsRouter); // el router decide auth/roles
+
+// Notificaciones de la fundación
+app.use("/api/v1/notifications", notificationsRouter);
+
+// Matching con KNN (requiere autenticación)
+app.use("/api/v1/matching", requireAuth, matchingRouter);
 
 /**
  * ⚠️ IMPORTANTE: Montar PRIMERO la subruta específica de animales de fundación
@@ -110,31 +128,6 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 /* --------------------------------- Start -------------------------------- */
-async function start() {
-  const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
-  if (!mongoUri) {
-    console.error("Falta MONGODB_URI en .env");
-    process.exit(1);
-  }
 
-  if (!process.env.JWT_ACCESS_SECRET && !process.env.JWT_SECRET) {
-    console.error("Falta JWT_ACCESS_SECRET o JWT_SECRET en .env");
-    process.exit(1);
-  }
-  // JWT_REFRESH_SECRET opcional si no usas refresh
-
-  await mongoose.connect(mongoUri);
-  console.log("MongoDB conectado");
-
-  const PORT = Number(process.env.PORT ?? 4000); // default 4000 para el front
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`API listening on http://localhost:${PORT}`);
-  });
-}
-
-start().catch((err) => {
-  console.error("Error al iniciar:", err);
-  process.exit(1);
-});
-
+// Exporta solo la instancia de app para los tests y para el arranque en index.ts
 export default app;

@@ -14,6 +14,11 @@ interface Preferences {
   hasChildren: boolean;
   otherPets: OtherPets;   // none/dog/cat/both
   dwelling: string;       // house/apartment/etc.
+  experienceLevel?: "NONE" | "BEGINNER" | "INTERMEDIATE" | "EXPERT";
+  activityLevel?: "LOW" | "MEDIUM" | "HIGH";
+  spaceSize?: "SMALL" | "MEDIUM" | "LARGE";
+  timeAvailable?: "LOW" | "MEDIUM" | "HIGH";
+  groomingCommitment?: "LOW" | "MEDIUM" | "HIGH";
   completed: boolean;     // si ya hizo onboarding
 }
 
@@ -66,6 +71,26 @@ const userSchema = new Schema<IUser>(
         hasChildren: { type: Boolean, default: false },
         otherPets: { type: String, enum: ["none", "dog", "cat", "both"], default: "none" },
         dwelling: { type: String, default: "" },
+        experienceLevel: {
+          type: String,
+          enum: ["NONE", "BEGINNER", "INTERMEDIATE", "EXPERT"],
+        },
+        activityLevel: {
+          type: String,
+          enum: ["LOW", "MEDIUM", "HIGH"],
+        },
+        spaceSize: {
+          type: String,
+          enum: ["SMALL", "MEDIUM", "LARGE"],
+        },
+        timeAvailable: {
+          type: String,
+          enum: ["LOW", "MEDIUM", "HIGH"],
+        },
+        groomingCommitment: {
+          type: String,
+          enum: ["LOW", "MEDIUM", "HIGH"],
+        },
         completed: { type: Boolean, default: false },
       },
     },
