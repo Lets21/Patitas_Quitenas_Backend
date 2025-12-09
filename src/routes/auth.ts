@@ -82,6 +82,33 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Dirección inválida (10-200 caracteres)" });
     }
 
+    // Validación de fecha de nacimiento para ADOPTANTE
+    if (role === "ADOPTANTE" && req.body.dateOfBirth) {
+      const birthDate = new Date(req.body.dateOfBirth);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      
+      if (age < 18) {
+        return res.status(400).json({ error: "Debes ser mayor de 18 años para adoptar" });
+      }
+      
+      if (birthDate > today) {
+        return res.status(400).json({ error: "Fecha de nacimiento inválida" });
+      }
+    }
+
+    // Validación de organización para FUNDACION y CLINICA
+    if ((role === "FUNDACION" || role === "CLINICA") && req.body.organization) {
+      if (!req.body.organization.name || req.body.organization.name.trim().length < 3) {
+        return res.status(400).json({ error: "El nombre de la organización debe tener al menos 3 caracteres" });
+      }
+    }
+
     // Verificar si el email ya existe
     const exists = await User.findOne({ email: email.toLowerCase() });
     if (exists) return res.status(409).json({ error: "Email ya registrado" });
@@ -102,6 +129,10 @@ router.post("/register", async (req, res) => {
       status: "ACTIVE",
       foundationName: role === "FUNDACION" ? foundationName : undefined,
       clinicName: role === "CLINICA" ? clinicName : undefined,
+      // Diferenciador para FUNDACION y CLINICA
+      organization: (role === "FUNDACION" || role === "CLINICA") && req.body.organization ? req.body.organization : undefined,
+      // Diferenciador para ADOPTANTE
+      dateOfBirth: role === "ADOPTANTE" && req.body.dateOfBirth ? new Date(req.body.dateOfBirth) : undefined,
     });
     await user.save();
 

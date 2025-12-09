@@ -33,6 +33,9 @@ interface Profile {
 interface Organization {
   name: string;
   description?: string;
+  ruc?: string;      // RUC de la organización (opcional)
+  address?: string;  // Dirección de la organización (opcional)
+  phone?: string;    // Teléfono de la organización (opcional)
 }
 
 export interface IUser {
@@ -44,7 +47,8 @@ export interface IUser {
   isActive: boolean;
   foundationName?: string; // opcional para FUNDACION
   clinicName?: string;     // opcional para CLINICA
-  organization?: Organization; // información de la organización
+  organization?: Organization; // información de la organización (FUNDACION y CLINICA)
+  dateOfBirth?: Date;      // fecha de nacimiento (ADOPTANTE)
 }
 
 const userSchema = new Schema<IUser>(
@@ -101,7 +105,11 @@ const userSchema = new Schema<IUser>(
     organization: {
       name: String,
       description: String,
+      ruc: String,
+      address: String,
+      phone: String,
     },
+    dateOfBirth: Date,  // fecha de nacimiento para ADOPTANTE
   },
   { timestamps: true }
 );
