@@ -57,6 +57,7 @@ const AnimalSchema = new Schema(
     name: { type: String, required: true, index: true },
     photos: { type: [String], default: [] },
     attributes: { type: AttributesSchema, required: true },
+    ageMonths: { type: Number }, // Edad en meses (opcional, se puede calcular de attributes.age)
     clinicalSummary: { type: String, default: "" },
     state: { type: String, enum: ["AVAILABLE", "RESERVED", "ADOPTED"], default: "AVAILABLE" },
     foundationId: { type: Types.ObjectId, ref: "User", required: true },

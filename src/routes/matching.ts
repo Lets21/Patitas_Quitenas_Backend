@@ -2,7 +2,7 @@ import { Router } from "express";
 import { Animal } from "../models/Animal";
 import { User } from "../models/User";
 import { verifyJWT } from "../middleware/verifyJWT";
-import { knnMatchingService } from "../services/matching/knnMatchingService";
+import { knnMatchingService } from "../knn";
 
 const router = Router();
 
@@ -43,29 +43,38 @@ router.get("/recommendations", verifyJWT, async (req, res) => {
       });
     }
 
-    // Transformar animales al formato esperado por el servicio
+    // Transformar animales al formato esperado por el servicio KNN
     const animalsData = animals.map((animal: any) => ({
       id: animal._id.toString(),
       name: animal.name,
       attributes: animal.attributes,
+      ageMonths: animal.ageMonths,
+      photos: animal.photos,
+      clinicalHistory: animal.clinicalHistory,
       personality: animal.personality,
-      compatibility: animal.compatibility,
     }));
 
-    // Calcular matches usando KNN
-    const topK = parseInt(req.query.limit as string) || 10;
-    const matches = knnMatchingService.getTopMatches(
+    // Calcular matches usando KNN real (modelo entrenado)
+    const topK = parseInt(req.query.limit as string) || 15; // Usar K del modelo por defecto
+    const knnResult = knnMatchingService.knnRecommend(
       preferences as any,
-      animalsData,
-      topK
+      animalsData
     );
+
+    // Obtener solo los top K matches
+    const matches = knnResult.topMatches;
 
     // Enriquecer con datos completos de los animales
     const enrichedMatches = await Promise.all(
       matches.map(async (match) => {
         const animal = await Animal.findById(match.animalId).lean();
         return {
-          ...match,
+          animalId: match.animalId,
+          animalName: match.animalName,
+          distance: match.distance, // Distancia Manhattan en espacio escalado
+          score: match.score, // Score 0-100 (menor distancia = mayor score)
+          rank: match.rank, // Posición en el ranking
+          isTopK: match.isTopK, // Si está en los K mejores
           animal: animal ? {
             id: animal._id.toString(),
             name: animal.name,
@@ -86,6 +95,10 @@ router.get("/recommendations", verifyJWT, async (req, res) => {
     return res.json({
       matches: validMatches,
       total: validMatches.length,
+      k: knnResult.k, // Número de vecinos considerados
+      totalAnimals: knnResult.totalAnimals, // Total de animales evaluados
+      algorithm: "KNN", // Indicar que es KNN real
+      metric: "manhattan", // Métrica de distancia usada
       preferences: {
         preferredSize: preferences.preferredSize,
         preferredEnergy: preferences.preferredEnergy,
@@ -139,25 +152,21 @@ router.post("/calculate", verifyJWT, async (req, res) => {
       return res.status(404).json({ error: "Animal no encontrado" });
     }
 
-    // Calcular match
+    // Calcular match usando KNN real
     const animalData = {
       id: animal._id.toString(),
       name: animal.name,
       attributes: animal.attributes,
+      ageMonths: (animal as any).ageMonths,
+      photos: (animal as any).photos,
+      clinicalHistory: (animal as any).clinicalHistory,
       personality: animal.personality,
-      compatibility: animal.compatibility,
     };
 
-    const matches = knnMatchingService.calculateMatches(
+    const match = knnMatchingService.calculateSingleMatch(
       preferences as any,
-      [animalData as any]
+      animalData as any
     );
-
-    if (matches.length === 0) {
-      return res.status(500).json({ error: "Error al calcular match" });
-    }
-
-    const match = matches[0];
 
     return res.json({
       match: {
@@ -165,19 +174,87 @@ router.post("/calculate", verifyJWT, async (req, res) => {
         animal: {
           id: animal._id.toString(),
           name: animal.name,
-          photos: animal.photos,
+          photos: (animal as any).photos,
           attributes: animal.attributes,
-          state: animal.state,
-          clinicalSummary: animal.clinicalSummary,
+          state: (animal as any).state,
+          clinicalSummary: (animal as any).clinicalSummary,
           personality: animal.personality,
-          compatibility: animal.compatibility,
+          compatibility: (animal as any).compatibility,
         },
       },
+      algorithm: "KNN",
+      metric: "manhattan",
     });
   } catch (error: any) {
     console.error("Error en calculate match:", error);
     return res.status(500).json({
       error: "Error al calcular match",
+      details: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/matching/explain/:animalId
+ * Explica en detalle por qué un animal es (o no es) compatible
+ * Útil para debugging y transparencia del algoritmo
+ */
+router.get("/explain/:animalId", verifyJWT, async (req, res) => {
+  try {
+    const userId = (req as any).user?.id;
+    const { animalId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ error: "No autenticado" });
+    }
+
+    // Obtener usuario con preferencias
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const preferences = user.profile?.preferences;
+    if (!preferences || !preferences.completed) {
+      return res.status(400).json({
+        error: "Debes completar tu perfil de preferencias primero",
+        needsOnboarding: true,
+      });
+    }
+
+    // Obtener animal
+    const animal = await Animal.findById(animalId).lean();
+    if (!animal) {
+      return res.status(404).json({ error: "Animal no encontrado" });
+    }
+
+    // Generar explicación detallada
+    const animalData = {
+      id: animal._id.toString(),
+      name: animal.name,
+      attributes: animal.attributes,
+      ageMonths: (animal as any).ageMonths,
+      photos: (animal as any).photos,
+      clinicalHistory: (animal as any).clinicalHistory,
+      personality: animal.personality,
+    };
+
+    const explanation = knnMatchingService.explainMatch(
+      preferences as any,
+      animalData as any
+    );
+
+    return res.json({
+      explanation,
+      algorithm: "KNN",
+      metric: "manhattan",
+      k: knnMatchingService.getK(),
+      note: "Features normalizadas con StandardScaler del modelo entrenado"
+    });
+  } catch (error: any) {
+    console.error("Error en explain:", error);
+    return res.status(500).json({
+      error: "Error al explicar match",
       details: error.message,
     });
   }
@@ -226,26 +303,34 @@ router.get("/stats", verifyJWT, async (req, res) => {
       });
     }
 
-    // Transformar y calcular matches
+    // Transformar y calcular matches usando KNN real
     const animalsData = animals.map((animal: any) => ({
       id: animal._id.toString(),
       name: animal.name,
       attributes: animal.attributes,
+      ageMonths: animal.ageMonths,
+      photos: animal.photos,
+      clinicalHistory: animal.clinicalHistory,
       personality: animal.personality,
-      compatibility: animal.compatibility,
     }));
 
-    const matches = knnMatchingService.calculateMatches(
+    const stats = knnMatchingService.getMatchingStats(
       preferences as any,
       animalsData
     );
 
-    // Clasificar por score
-    const highMatches = matches.filter((m) => m.matchScore >= 75).length;
-    const mediumMatches = matches.filter(
-      (m) => m.matchScore >= 50 && m.matchScore < 75
+    // Calcular matches para clasificar por score
+    const knnResult = knnMatchingService.knnRecommend(
+      preferences as any,
+      animalsData
+    );
+
+    // Clasificar por score (ahora basado en distancia real)
+    const highMatches = knnResult.allMatches.filter((m) => m.score >= 75).length;
+    const mediumMatches = knnResult.allMatches.filter(
+      (m) => m.score >= 50 && m.score < 75
     ).length;
-    const lowMatches = matches.filter((m) => m.matchScore < 50).length;
+    const lowMatches = knnResult.allMatches.filter((m) => m.score < 50).length;
 
     return res.json({
       hasPreferences: true,
@@ -253,8 +338,14 @@ router.get("/stats", verifyJWT, async (req, res) => {
       highMatches,
       mediumMatches,
       lowMatches,
-      averageScore:
-        matches.reduce((sum, m) => sum + m.matchScore, 0) / matches.length,
+      averageScore: stats.averageScore,
+      averageDistance: stats.averageDistance,
+      minDistance: stats.minDistance,
+      maxDistance: stats.maxDistance,
+      topKThreshold: stats.topKThreshold,
+      k: knnResult.k,
+      algorithm: "KNN",
+      metric: "manhattan",
     });
   } catch (error: any) {
     console.error("Error en stats:", error);
