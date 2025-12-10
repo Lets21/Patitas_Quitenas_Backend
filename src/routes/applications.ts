@@ -219,6 +219,50 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
       adopterId: created.adopterId,
     });
 
+    // Crear notificaciones en base de datos (no bloqueantes)
+    Promise.resolve().then(async () => {
+      try {
+        const { Notification } = require("../models/Notification");
+        const adopter = await User.findById(adopterId).lean();
+        
+        // Notificación para fundación
+        await Notification.create({
+          foundationId: foundationId,
+          type: "adoption",
+          title: "Nueva solicitud de adopción",
+          message: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""} ha enviado una solicitud para adoptar a ${(animal as any).name || ""}`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "medium",
+          metadata: {
+            animalName: (animal as any).name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+
+        // Notificación para clínica (global, clinicId: null para todas las clínicas)
+        try {
+          await Notification.create({
+            clinicId: null as any, // null explícito para notificaciones globales de clínica
+            type: "adoption",
+            title: "Nueva solicitud de adopción",
+            message: `Nueva solicitud de adopción para ${(animal as any).name || ""} de ${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`,
+            timestamp: new Date(),
+            isRead: false,
+            priority: "medium",
+            metadata: {
+              animalName: (animal as any).name || "",
+              userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+            }
+          });
+        } catch (clinicNotifErr) {
+          console.error("Error creando notificación para clínica:", clinicNotifErr);
+        }
+      } catch (err) {
+        console.error("Error creando notificaciones en BD:", err);
+      }
+    });
+
     // Enviar notificaciones por email (no bloqueantes)
     console.log('📧 Iniciando envío de notificaciones por email...');
     Promise.all([
@@ -696,7 +740,7 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response, next: Next
     // Si la solicitud fue aprobada, actualizar el estado del animal a 'ADOPTED'
     if (status === "APPROVED") {
       await Animal.findByIdAndUpdate(updated.animalId, { $set: { state: "ADOPTED" } });
-      // Notificación de adopción exitosa
+      // Notificación de adopción exitosa para fundación
       try {
         await Notification.create({
           foundationId: updated.foundationId,
@@ -712,13 +756,31 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response, next: Next
           }
         });
       } catch (err) {
-        console.error("Error creando notificación de adopción:", err);
+        console.error("Error creando notificación de adopción para fundación:", err);
+      }
+      // Notificación de adopción exitosa para clínica
+      try {
+        await Notification.create({
+          clinicId: null as any,
+          type: "adoption",
+          title: "Adopción exitosa",
+          message: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""} ha adoptado a ${animal?.name || ""}`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "medium",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación de adopción para clínica:", err);
       }
     }
     // Si la solicitud fue rechazada
     if (status === "REJECTED") {
       await Animal.findByIdAndUpdate(updated.animalId, { $set: { state: "AVAILABLE" } });
-      // Notificación de rechazo
+      // Notificación de rechazo para fundación
       try {
         await Notification.create({
           foundationId: updated.foundationId,
@@ -734,13 +796,31 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response, next: Next
           }
         });
       } catch (err) {
-        console.error("Error creando notificación de rechazo:", err);
+        console.error("Error creando notificación de rechazo para fundación:", err);
+      }
+      // Notificación de rechazo para clínica
+      try {
+        await Notification.create({
+          clinicId: null as any,
+          type: "adoption",
+          title: "Solicitud rechazada",
+          message: `La solicitud de ${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""} para adoptar a ${animal?.name || ""} fue rechazada.`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "high",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación de rechazo para clínica:", err);
       }
     }
     // Si la solicitud se pone en revisión
     if (status === "IN_REVIEW") {
       await Animal.findByIdAndUpdate(updated.animalId, { $set: { state: "AVAILABLE" } });
-      // Notificación de revisión
+      // Notificación de revisión para fundación
       try {
         await Notification.create({
           foundationId: updated.foundationId,
@@ -756,12 +836,30 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response, next: Next
           }
         });
       } catch (err) {
-        console.error("Error creando notificación de revisión:", err);
+        console.error("Error creando notificación de revisión para fundación:", err);
+      }
+      // Notificación de revisión para clínica
+      try {
+        await Notification.create({
+          clinicId: null as any,
+          type: "adoption",
+          title: "Solicitud en revisión",
+          message: `La solicitud de ${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""} para adoptar a ${animal?.name || ""} está en revisión.`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "medium",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación de revisión para clínica:", err);
       }
     }
     // Si la solicitud pasa por clínica (ejemplo: HOME_VISIT)
     if (status === "HOME_VISIT") {
-      // Notificación de visita domiciliaria/clínica
+      // Notificación de visita domiciliaria/clínica para fundación
       try {
         await Notification.create({
           foundationId: updated.foundationId,
@@ -777,7 +875,25 @@ router.patch("/:id", requireAuth, async (req: Request, res: Response, next: Next
           }
         });
       } catch (err) {
-        console.error("Error creando notificación clínica:", err);
+        console.error("Error creando notificación clínica para fundación:", err);
+      }
+      // Notificación de visita domiciliaria/clínica para clínica
+      try {
+        await Notification.create({
+          clinicId: null as any,
+          type: "clinical",
+          title: "Visita domiciliaria programada",
+          message: `Se ha programado una visita domiciliaria para ${animal?.name || ""} (solicitante: ${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}).`,
+          timestamp: new Date(),
+          isRead: false,
+          priority: "medium",
+          metadata: {
+            animalName: animal?.name || "",
+            userName: `${adopter?.profile?.firstName || ""} ${adopter?.profile?.lastName || ""}`
+          }
+        });
+      } catch (err) {
+        console.error("Error creando notificación clínica para clínica:", err);
       }
     }
     // Si la solicitud fue rechazada o puesta en revisión, actualizar el estado del animal a 'AVAILABLE'
