@@ -19,6 +19,7 @@ import foundationRoutes from "./routes/foundation";
 import adminRoutes from "./routes/admin";
 import foundationAnimalsRoutes from "./routes/foundation.animals";
 import applicationsRouter from "./routes/applications";
+import appointmentsRouter from "./routes/appointments";
 import contactRouter from "./routes/contact";
 import notificationsRouter from "./routes/notifications";
 import matchingRouter from "./routes/matching";
@@ -91,6 +92,9 @@ app.use("/api/v1/clinic", requireAuth, clinicRoutes);
 app.use("/api/v1/admin", requireAuth, requireRole("ADMIN"), adminRoutes);
 // Solicitudes de adopción
 app.use("/api/v1/applications", applicationsRouter); // el router decide auth/roles
+
+// Citas de clínica
+app.use("/api/v1/appointments", appointmentsRouter); // el router decide auth/roles
 
 // Notificaciones de la fundación
 app.use("/api/v1/notifications", notificationsRouter);

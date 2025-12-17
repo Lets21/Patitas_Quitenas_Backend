@@ -7,6 +7,7 @@ export type NotificationPriority = "low" | "medium" | "high";
 export interface NotificationDoc extends Document {
   foundationId?: Types.ObjectId;
   clinicId?: Types.ObjectId;
+  userId?: Types.ObjectId; // Para notificaciones de usuarios adoptantes
   type: NotificationType;
   title: string;
   message: string;
@@ -24,6 +25,7 @@ export interface NotificationDoc extends Document {
 const NotificationSchema = new Schema<NotificationDoc>({
   foundationId: { type: Schema.Types.ObjectId, ref: "User", required: false },
   clinicId: { type: Schema.Types.ObjectId, ref: "User", required: false },
+  userId: { type: Schema.Types.ObjectId, ref: "User", required: false }, // Para usuarios adoptantes
   type: { type: String, enum: ["adoption", "clinical", "system", "alert"], required: true },
   title: { type: String, required: true },
   message: { type: String, required: true },
@@ -38,14 +40,15 @@ const NotificationSchema = new Schema<NotificationDoc>({
   },
 });
 
-// Validación: al menos uno de foundationId o clinicId debe estar presente
+// Validación: al menos uno de foundationId, clinicId o userId debe estar presente
 // clinicId puede ser null para notificaciones globales de clínicas
 NotificationSchema.pre("validate", function(next) {
   const hasFoundation = !!this.foundationId;
   const hasClinic = this.clinicId !== undefined; // null es válido (notificación global)
+  const hasUser = !!this.userId;
   
-  if (!hasFoundation && !hasClinic) {
-    return next(new Error("Al menos uno de foundationId o clinicId debe estar presente"));
+  if (!hasFoundation && !hasClinic && !hasUser) {
+    return next(new Error("Al menos uno de foundationId, clinicId o userId debe estar presente"));
   }
   next();
 });
