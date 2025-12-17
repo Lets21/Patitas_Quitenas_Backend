@@ -185,6 +185,11 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
     const animal = await Animal.findById(animalId).lean();
     if (!animal) return res.status(404).json({ error: "Animal no encontrado" });
 
+    // Validar que el animal no esté adoptado
+    if ((animal as any).state === "ADOPTED") {
+      return res.status(400).json({ error: "Este animal ya ha sido adoptado y no está disponible para nuevas solicitudes" });
+    }
+
     const foundationId = (animal as any).foundationId;
     if (!foundationId) {
       return res.status(400).json({ error: "El animal no tiene foundationId asociado" });
