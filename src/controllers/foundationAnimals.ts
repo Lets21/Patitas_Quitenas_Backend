@@ -59,20 +59,48 @@ export async function getFoundationAnimals(
     const total = await Animal.countDocuments(filter);
     
     // Formatear respuesta
-    const formattedAnimals = animals.map(animal => ({
-      id: animal._id?.toString() || animal._id,
-      _id: animal._id?.toString() || animal._id, // Agregar _id también para compatibilidad
-      name: animal.name,
-      ageMonths: (animal as any).ageMonths || 0, // Edad real en meses
-      attributes: animal.attributes, // Incluir todos los atributos
-      state: animal.state,
-      photos: animal.photos || [],
-      photo: animal.photos?.[0] || null, // Mantener compatibilidad
-      clinicalSummary: animal.clinicalSummary || "Sin información",
-      personality: (animal as any).personality,
-      compatibility: (animal as any).compatibility,
-      clinicalHistory: (animal as any).clinicalHistory,
-    }));
+    const formattedAnimals = animals.map(animal => {
+      const ageMonths = (animal as any).ageMonths || 0;
+      const ageYears = Math.floor(ageMonths / 12);
+      const remainingMonths = ageMonths % 12;
+      
+      // Formatear edad para display
+      let ageDisplay = "";
+      if (ageMonths < 12) {
+        // Menor a 1 año: mostrar solo meses
+        ageDisplay = `${ageMonths} ${ageMonths === 1 ? 'mes' : 'meses'}`;
+      } else if (remainingMonths === 0) {
+        // Edad exacta en años: mostrar solo años
+        ageDisplay = `${ageYears} ${ageYears === 1 ? 'año' : 'años'}`;
+      } else {
+        // Tiene años y meses: mostrar ambos
+        ageDisplay = `${ageYears} ${ageYears === 1 ? 'año' : 'años'} y ${remainingMonths} ${remainingMonths === 1 ? 'mes' : 'meses'}`;
+      }
+      
+      return {
+        id: animal._id?.toString() || animal._id,
+        _id: animal._id?.toString() || animal._id,
+        name: animal.name,
+        age: ageYears, // Edad en años (para compatibilidad)
+        ageMonths: ageMonths, // Edad total en meses
+        ageDisplay: ageDisplay, // Texto formateado para mostrar
+        breed: animal.attributes?.breed || "Desconocido",
+        size: animal.attributes?.size || "Desconocido",
+        gender: animal.attributes?.gender || "Desconocido",
+        energy: animal.attributes?.energy || "Desconocido",
+        health: [animal.attributes?.health].filter(Boolean), // Array con el estado de salud
+        status: animal.state,
+        statusLabel: getStatusLabel(animal.state),
+        statusColor: getStatusColor(animal.state),
+        photo: animal.photos?.[0] || null,
+        clinicalSummary: animal.clinicalSummary || "Sin información",
+        attributes: animal.attributes, // Mantener para compatibilidad
+        photos: animal.photos || [],
+        personality: (animal as any).personality,
+        compatibility: (animal as any).compatibility,
+        clinicalHistory: (animal as any).clinicalHistory,
+      };
+    });
 
     console.log(`[getFoundationAnimals] Returning ${formattedAnimals.length} animals, total: ${total}`);
     

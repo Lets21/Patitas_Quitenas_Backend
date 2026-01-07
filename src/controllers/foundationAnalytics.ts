@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { Animal } from "../models/Animal";
 import { Application } from "../models/Application";
+import { Types } from "mongoose";
 
 /**
  * Controlador para obtener estadísticas avanzadas y analytics de la fundación
@@ -13,6 +14,7 @@ export async function getFoundationAnalytics(
 ) {
   try {
     const foundationId = req.user!.id;
+    const foundationObjectId = new Types.ObjectId(foundationId);
 
     // 1. ADOPCIONES POR MES (últimos 6 meses)
     const sixMonthsAgo = new Date();
@@ -21,7 +23,7 @@ export async function getFoundationAnalytics(
     const adoptionsByMonth = await Animal.aggregate([
       {
         $match: {
-          foundationId: foundationId,
+          foundationId: foundationObjectId,
           state: "ADOPTED",
           updatedAt: { $gte: sixMonthsAgo },
         },
@@ -62,7 +64,7 @@ export async function getFoundationAnalytics(
 
     // 2. PERROS CON MÁS SOLICITUDES
     const topAnimalsWithApplications = await Application.aggregate([
-      { $match: { foundationId: foundationId } },
+      { $match: { foundationId: foundationObjectId } },
       {
         $group: {
           _id: "$animalId",
@@ -86,6 +88,7 @@ export async function getFoundationAnalytics(
           name: "$animal.name",
           breed: "$animal.attributes.breed",
           age: "$animal.attributes.age",
+          ageMonths: "$animal.ageMonths",
           applicationCount: 1,
           photos: "$animal.photos",
           state: "$animal.state",
@@ -94,15 +97,15 @@ export async function getFoundationAnalytics(
     ]);
 
     // 3. TOTAL DE PERROS Y ADOPTADOS (necesario para otras métricas)
-    const totalDogs = await Animal.countDocuments({ foundationId });
+    const totalDogs = await Animal.countDocuments({ foundationId: foundationObjectId });
     const adoptedDogs = await Animal.countDocuments({
-      foundationId,
+      foundationId: foundationObjectId,
       state: "ADOPTED",
     });
 
     // 4. DISTRIBUCIÓN DE PERROS POR ESTADO
     const stateDistribution = await Animal.aggregate([
-      { $match: { foundationId: foundationId } },
+      { $match: { foundationId: foundationObjectId } },
       {
         $group: {
           _id: "$state",
@@ -126,7 +129,7 @@ export async function getFoundationAnalytics(
 
     // 6. SOLICITUDES POR ESTADO
     const applicationsByStatus = await Application.aggregate([
-      { $match: { foundationId: foundationId } },
+      { $match: { foundationId: foundationObjectId } },
       {
         $group: {
           _id: "$status",
@@ -142,7 +145,7 @@ export async function getFoundationAnalytics(
 
     // 7. TIEMPO PROMEDIO HASTA ADOPCIÓN
     const adoptedAnimals = await Animal.find({
-      foundationId,
+      foundationId: foundationObjectId,
       state: "ADOPTED",
     }).select("createdAt updatedAt");
 
@@ -160,16 +163,16 @@ export async function getFoundationAnalytics(
 
     // 8. ADOPCIONES RECIENTES (últimas 5)
     const recentAdoptions = await Animal.find({
-      foundationId,
+      foundationId: foundationObjectId,
       state: "ADOPTED",
     })
       .sort({ updatedAt: -1 })
       .limit(5)
-      .select("name attributes.breed attributes.age updatedAt photos");
+      .select("name attributes.breed attributes.age ageMonths updatedAt photos");
 
     // 9. PERROS POR TAMAÑO
     const dogsBySize = await Animal.aggregate([
-      { $match: { foundationId: foundationId } },
+      { $match: { foundationId: foundationObjectId } },
       {
         $group: {
           _id: "$attributes.size",
@@ -178,14 +181,14 @@ export async function getFoundationAnalytics(
       },
       {
         $match: {
-          _id: { $ne: null }, // Filtrar valores null
+          _id: { $ne: null },
         },
       },
     ]);
 
     // 10. PERROS POR NIVEL DE ENERGÍA
     const dogsByEnergy = await Animal.aggregate([
-      { $match: { foundationId: foundationId } },
+      { $match: { foundationId: foundationObjectId } },
       {
         $group: {
           _id: "$attributes.energy",
@@ -194,7 +197,7 @@ export async function getFoundationAnalytics(
       },
       {
         $match: {
-          _id: { $ne: null }, // Filtrar valores null
+          _id: { $ne: null },
         },
       },
     ]);
@@ -203,7 +206,7 @@ export async function getFoundationAnalytics(
     const registrationTrend = await Animal.aggregate([
       {
         $match: {
-          foundationId: foundationId,
+          foundationId: foundationObjectId,
           createdAt: { $gte: sixMonthsAgo },
         },
       },
@@ -243,7 +246,7 @@ export async function getFoundationAnalytics(
           totalDogs,
           adoptedDogs,
           totalApplications: await Application.countDocuments({
-            foundationId,
+            foundationId: foundationObjectId,
           }),
         },
       },
