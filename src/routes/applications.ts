@@ -8,6 +8,8 @@ import { requireRole } from "../middleware/requireRole";
 import { verifyJWT } from "../middleware/verifyJWT";
 import { scoreApplication } from "../services/scoring/scoreApplication";
 import { emailService } from "../services/emailService";
+import { dogToMlPayload } from "../ml/dogToMlPayload";
+import { predictAdoptionPropensity } from "../services/mlClient";
 import mongoose from "mongoose";
 
 const router = Router();
@@ -200,11 +202,51 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
     // Calcular score (animal viene de .lean() así que es un objeto plano)
     const { pct, eligible, detail } = scoreApplication(normalizedForm, animal as any);
 
+    // ========== PREDICCIÓN ML: PROPENSIÓN DE ADOPCIÓN ==========
+    let pred: number | null = null;
+    let proba: number | null = null;
+    let mlExplanation: any = null;
+
+    try {
+      console.log("🤖 Llamando al servicio ML para predicción de adopción...");
+      const payload = dogToMlPayload(animal);
+      console.log("📦 Payload enviado al ML Service (18 características):");
+      console.log(JSON.stringify(payload, null, 2));
+      
+      console.log("\n🔍 VALORES CRÍTICOS DEL PERRO:");
+      console.log(`   Nombre: ${animal.name}`);
+      console.log(`   Age (meses): ${payload.Age}`);
+      console.log(`   Breed1: ${payload.Breed1}`);
+      console.log(`   Breed2: ${payload.Breed2}`);
+      console.log(`   Gender: ${payload.Gender}`);
+      console.log(`   Color1: ${payload.Color1}`);
+      console.log(`   MaturitySize: ${payload.MaturitySize}`);
+      console.log(`   FurLength: ${payload.FurLength}\n`);
+      
+      const result = await predictAdoptionPropensity(payload);
+      pred = result.pred;
+      proba = result.proba_adopta_1;
+      mlExplanation = result.explanation;
+      
+      console.log("✅ Predicción ML recibida:", { 
+        pred: pred === 1 ? "1 (Propenso)" : "0 (No propenso)", 
+        probabilidad: proba !== null ? `${(proba * 100).toFixed(1)}%` : "N/A",
+        vecinos_adoptados: mlExplanation?.adopted_neighbors || "N/A",
+        vecinos_no_adoptados: mlExplanation?.not_adopted_neighbors || "N/A"
+      });
+    } catch (e: any) {
+      // No revientes la app si ML falla: registra y sigue
+      console.error("⚠️  ML predict error:", e?.response?.data || e.message);
+      debugLog("ML service no disponible o error en predicción");
+    }
+
     debugLog("📝 Creando solicitud:", {
       animalId,
       adopterId,
       foundationId,
       scorePct: pct,
+      propensityPred: pred,
+      propensityProba: proba,
     });
 
     const created = await Application.create({
@@ -216,6 +258,11 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
       scorePct: pct,
       scoreDetail: detail,
       eligible,
+      // Campos ML
+      propensityPred: pred,
+      propensityProba: proba,
+      mlVersion: "knn-v1",
+      mlExplanation,
     });
 
     debugLog("✅ Solicitud creada:", {
@@ -1192,6 +1239,49 @@ router.get("/:id", requireAuth, async (req: Request, res: Response, next: NextFu
     }
 
     res.json(app);
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * DELETE /api/applications/:id
+ * Eliminar una solicitud de adopción (solo FUNDACION o ADMIN)
+ */
+router.delete("/:id", verifyJWT, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const u = (req as any).user;
+    const role = u.role;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    const app = await Application.findById(id);
+    if (!app) {
+      return res.status(404).json({ error: "Solicitud no encontrada" });
+    }
+
+    // Si es FUNDACION, verificar que la solicitud pertenece a su fundación
+    if (role === "FUNDACION") {
+      const foundationId = u.id || u._id || u.sub;
+      const appFoundationId = app.foundationId?.toString();
+      if (appFoundationId !== foundationId.toString()) {
+        return res.status(403).json({ error: "No tienes permiso para eliminar esta solicitud" });
+      }
+    }
+
+    // Solo ADMIN o FUNDACION pueden eliminar
+    if (role !== "ADMIN" && role !== "FUNDACION") {
+      return res.status(403).json({ error: "No autorizado para eliminar solicitudes" });
+    }
+
+    await Application.findByIdAndDelete(id);
+    
+    debugLog("🗑️ Solicitud eliminada:", { id, deletedBy: u.email });
+    
+    res.json({ message: "Solicitud eliminada exitosamente", id });
   } catch (e) {
     next(e);
   }

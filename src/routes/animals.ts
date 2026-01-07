@@ -39,6 +39,7 @@ function mapDocToDto(d: any) {
     photos: Array.isArray(d.photos) ? d.photos : [],
     clinicalSummary: String(d.clinicalSummary ?? ""),
     state: toState(d.state),
+    ageMonths: Number(d.ageMonths ?? 0), // Edad real en meses
     attributes: {
       age: Number(attrs.age ?? d.age ?? 0),
       size: toSize(attrs.size ?? d.size),

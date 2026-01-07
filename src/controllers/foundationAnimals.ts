@@ -49,7 +49,7 @@ export async function getFoundationAnimals(
     
     // Obtener animales
     const animals = await Animal.find(filter)
-      .select("name attributes state clinicalSummary photos createdAt updatedAt")
+      .select("name attributes state clinicalSummary photos ageMonths personality compatibility clinicalHistory createdAt updatedAt")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -61,22 +61,17 @@ export async function getFoundationAnimals(
     // Formatear respuesta
     const formattedAnimals = animals.map(animal => ({
       id: animal._id?.toString() || animal._id,
+      _id: animal._id?.toString() || animal._id, // Agregar _id también para compatibilidad
       name: animal.name,
-      age: animal.attributes?.age || 0,
-      breed: animal.attributes?.breed || "Desconocida",
-      size: animal.attributes?.size || "MEDIUM",
-      gender: animal.attributes?.gender || "MALE",
-      energy: animal.attributes?.energy || "MEDIUM",
-      health: [
-        // Determinar badges de salud basado en clinicalSummary o datos reales
-        "Vacunado",
-        ...(animal.state === "ADOPTED" ? ["Esterilizado"] : [])
-      ],
-      status: animal.state,
-      statusLabel: getStatusLabel(animal.state),
-      statusColor: getStatusColor(animal.state),
-      photo: animal.photos?.[0] || null,
+      ageMonths: (animal as any).ageMonths || 0, // Edad real en meses
+      attributes: animal.attributes, // Incluir todos los atributos
+      state: animal.state,
+      photos: animal.photos || [],
+      photo: animal.photos?.[0] || null, // Mantener compatibilidad
       clinicalSummary: animal.clinicalSummary || "Sin información",
+      personality: (animal as any).personality,
+      compatibility: (animal as any).compatibility,
+      clinicalHistory: (animal as any).clinicalHistory,
     }));
 
     console.log(`[getFoundationAnimals] Returning ${formattedAnimals.length} animals, total: ${total}`);

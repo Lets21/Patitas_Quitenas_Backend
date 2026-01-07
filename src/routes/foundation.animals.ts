@@ -127,7 +127,7 @@ router.post(
       const foundationId = getUserId(req);
       if (!foundationId) return res.status(401).json({ error: "No se pudo determinar el usuario" });
 
-      const { name = "", clinicalSummary = "", state = "AVAILABLE" } = req.body as any;
+      const { name = "", clinicalSummary = "", state = "AVAILABLE", ageMonths, breed1Code, breed2Code } = req.body as any;
       const attributes = safeJsonParse(req.body?.attributes, {});
 
       // Subir fotos a Cloudinary
@@ -151,6 +151,9 @@ router.post(
         name,
         photos,
         attributes,
+        ageMonths: ageMonths ? Number(ageMonths) : undefined,
+        breed1Code: breed1Code !== undefined ? Number(breed1Code) : 0,
+        breed2Code: breed2Code !== undefined ? Number(breed2Code) : 0,
         clinicalSummary,
         state,
         foundationId,
@@ -192,6 +195,9 @@ router.patch(
       if (body.clinicalSummary !== undefined) updates.clinicalSummary = body.clinicalSummary;
       if (body.state !== undefined) updates.state = body.state;
       if (body.attributes !== undefined) updates.attributes = safeJsonParse(body.attributes, body.attributes);
+      if (body.ageMonths !== undefined) updates.ageMonths = Number(body.ageMonths);
+      if (body.breed1Code !== undefined) updates.breed1Code = Number(body.breed1Code);
+      if (body.breed2Code !== undefined) updates.breed2Code = Number(body.breed2Code);
 
       // Extraer y validar campos adicionales (personality, compatibility, clinicalHistory)
       const extraFields = extractExtraFields(body);
