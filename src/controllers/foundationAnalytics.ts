@@ -93,7 +93,14 @@ export async function getFoundationAnalytics(
       },
     ]);
 
-    // 3. DISTRIBUCIÓN DE PERROS POR ESTADO
+    // 3. TOTAL DE PERROS Y ADOPTADOS (necesario para otras métricas)
+    const totalDogs = await Animal.countDocuments({ foundationId });
+    const adoptedDogs = await Animal.countDocuments({
+      foundationId,
+      state: "ADOPTED",
+    });
+
+    // 4. DISTRIBUCIÓN DE PERROS POR ESTADO
     const stateDistribution = await Animal.aggregate([
       { $match: { foundationId: foundationId } },
       {
@@ -102,17 +109,22 @@ export async function getFoundationAnalytics(
           count: { $sum: 1 },
         },
       },
+      {
+        $match: {
+          _id: { $ne: null }, // Filtrar valores null
+        },
+      },
     ]);
 
-    // 4. TASA DE ADOPCIÓN (% de perros adoptados del total)
-    const totalDogs = await Animal.countDocuments({ foundationId });
-    const adoptedDogs = await Animal.countDocuments({
-      foundationId,
-      state: "ADOPTED",
-    });
+    // Si no hay datos, agregar valores por defecto
+    if (stateDistribution.length === 0 && totalDogs > 0) {
+      stateDistribution.push({ _id: "AVAILABLE", count: totalDogs });
+    }
+
+    // 5. TASA DE ADOPCIÓN (% de perros adoptados del total)
     const adoptionRate = totalDogs > 0 ? (adoptedDogs / totalDogs) * 100 : 0;
 
-    // 5. SOLICITUDES POR ESTADO
+    // 6. SOLICITUDES POR ESTADO
     const applicationsByStatus = await Application.aggregate([
       { $match: { foundationId: foundationId } },
       {
@@ -121,9 +133,14 @@ export async function getFoundationAnalytics(
           count: { $sum: 1 },
         },
       },
+      {
+        $match: {
+          _id: { $ne: null }, // Filtrar valores null
+        },
+      },
     ]);
 
-    // 6. TIEMPO PROMEDIO HASTA ADOPCIÓN
+    // 7. TIEMPO PROMEDIO HASTA ADOPCIÓN
     const adoptedAnimals = await Animal.find({
       foundationId,
       state: "ADOPTED",
@@ -141,7 +158,7 @@ export async function getFoundationAnalytics(
       avgDaysToAdoption = Math.round(totalDays / adoptedAnimals.length);
     }
 
-    // 7. ADOPCIONES RECIENTES (últimas 5)
+    // 8. ADOPCIONES RECIENTES (últimas 5)
     const recentAdoptions = await Animal.find({
       foundationId,
       state: "ADOPTED",
@@ -150,7 +167,7 @@ export async function getFoundationAnalytics(
       .limit(5)
       .select("name attributes.breed attributes.age updatedAt photos");
 
-    // 8. PERROS POR TAMAÑO
+    // 9. PERROS POR TAMAÑO
     const dogsBySize = await Animal.aggregate([
       { $match: { foundationId: foundationId } },
       {
@@ -159,9 +176,14 @@ export async function getFoundationAnalytics(
           count: { $sum: 1 },
         },
       },
+      {
+        $match: {
+          _id: { $ne: null }, // Filtrar valores null
+        },
+      },
     ]);
 
-    // 9. PERROS POR NIVEL DE ENERGÍA
+    // 10. PERROS POR NIVEL DE ENERGÍA
     const dogsByEnergy = await Animal.aggregate([
       { $match: { foundationId: foundationId } },
       {
@@ -170,9 +192,14 @@ export async function getFoundationAnalytics(
           count: { $sum: 1 },
         },
       },
+      {
+        $match: {
+          _id: { $ne: null }, // Filtrar valores null
+        },
+      },
     ]);
 
-    // 10. TENDENCIA DE REGISTRO DE PERROS (últimos 6 meses)
+    // 11. TENDENCIA DE REGISTRO DE PERROS (últimos 6 meses)
     const registrationTrend = await Animal.aggregate([
       {
         $match: {
