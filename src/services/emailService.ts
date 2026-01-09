@@ -1436,6 +1436,216 @@ Patitas Quiteñas
       text,
     });
   }
+
+  /**
+   * Envía email de recuperación de contraseña
+   */
+  async sendPasswordResetEmail(data: {
+    to: string;
+    userName: string;
+    resetUrl: string;
+  }): Promise<boolean> {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          ${this.getEmailStyles()}
+        </head>
+        <body>
+          <div class="container">
+            ${this.getEmailHeader("linear-gradient(135deg, #f59e0b 0%, #d97706 100%)")}
+            
+            <div class="content">
+              <h2 style="color: #111827; font-size: 22px; margin-bottom: 15px;">
+                🔐 Recuperación de Contraseña
+              </h2>
+              
+              <p>Hola <strong>${data.userName}</strong>,</p>
+              
+              <p>
+                Recibimos una solicitud para restablecer la contraseña de tu cuenta en 
+                <strong>Huellitas Quiteñas</strong>.
+              </p>
+
+              <div class="highlight-box">
+                <p style="margin: 0; color: #1f2937;">
+                  <strong>⏰ Este enlace expira en 1 hora</strong>
+                </p>
+              </div>
+
+              <p style="text-align: center; margin: 25px 0;">
+                <a href="${data.resetUrl}" class="button" style="font-weight: 600;">
+                  Restablecer mi contraseña
+                </a>
+              </p>
+
+              <div class="info-box">
+                <p style="margin: 0 0 8px 0; font-size: 14px; color: #6b7280;">
+                  <strong>🛡️ Consejos de seguridad:</strong>
+                </p>
+                <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #6b7280;">
+                  <li>Usa al menos 8 caracteres</li>
+                  <li>Incluye mayúsculas, minúsculas y números</li>
+                  <li>No reutilices contraseñas de otras cuentas</li>
+                </ul>
+              </div>
+
+              <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px;">
+                <p style="margin: 0; font-size: 14px; color: #78350f;">
+                  <strong>⚠️ ¿No solicitaste este cambio?</strong><br>
+                  Si no fuiste tú, puedes ignorar este mensaje. Tu contraseña actual seguirá siendo válida.
+                </p>
+              </div>
+
+              <p style="margin-top: 20px; font-size: 14px; color: #9ca3af;">
+                Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+                <span style="color: #4F46E5; word-break: break-all;">${data.resetUrl}</span>
+              </p>
+
+              <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="font-size: 14px; color: #6b7280; margin: 0;">
+                  Con cariño,<br>
+                  <strong style="color: #111827;">El equipo de Huellitas Quiteñas</strong> 🐾
+                </p>
+              </div>
+            </div>
+
+            <div class="footer">
+              <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
+              <p>Huellitas Quiteñas © ${new Date().getFullYear()}</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const text = `
+🔐 Recuperación de Contraseña - Huellitas Quiteñas
+
+Hola ${data.userName},
+
+Recibimos una solicitud para restablecer la contraseña de tu cuenta.
+
+Para restablecer tu contraseña, visita el siguiente enlace:
+${data.resetUrl}
+
+⏰ Este enlace expira en 1 hora.
+
+🛡️ Consejos de seguridad:
+- Usa al menos 8 caracteres
+- Incluye mayúsculas, minúsculas y números
+- No reutilices contraseñas de otras cuentas
+
+⚠️ ¿No solicitaste este cambio?
+Si no fuiste tú, puedes ignorar este mensaje. Tu contraseña actual seguirá siendo válida.
+
+Con cariño,
+El equipo de Huellitas Quiteñas 🐾
+    `.trim();
+
+    return this.sendEmail({
+      to: data.to,
+      subject: "🔐 Recupera tu contraseña - Huellitas Quiteñas",
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Envía confirmación de cambio de contraseña
+   */
+  async sendPasswordChangedEmail(data: {
+    to: string;
+    userName: string;
+  }): Promise<boolean> {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          ${this.getEmailStyles()}
+        </head>
+        <body>
+          <div class="container">
+            ${this.getEmailHeader("linear-gradient(135deg, #10b981 0%, #059669 100%)")}
+            
+            <div class="content">
+              <h2 style="color: #111827; font-size: 22px; margin-bottom: 15px;">
+                ✅ Contraseña Actualizada
+              </h2>
+              
+              <p>Hola <strong>${data.userName}</strong>,</p>
+              
+              <p>
+                Tu contraseña ha sido actualizada exitosamente.
+              </p>
+
+              <div class="highlight-box" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border-left-color: #10b981;">
+                <p style="margin: 0; color: #065f46;">
+                  <strong>✓ Cambio realizado el:</strong> ${new Date().toLocaleString("es-ES", { 
+                    dateStyle: "full", 
+                    timeStyle: "short" 
+                  })}
+                </p>
+              </div>
+
+              <p style="margin-top: 20px;">
+                Ya puedes iniciar sesión con tu nueva contraseña en cualquier momento.
+              </p>
+
+              <div style="margin-top: 20px; padding: 15px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px;">
+                <p style="margin: 0; font-size: 14px; color: #78350f;">
+                  <strong>⚠️ ¿No realizaste este cambio?</strong><br>
+                  Si no fuiste tú quien cambió la contraseña, contacta inmediatamente con nuestro equipo de soporte.
+                </p>
+              </div>
+
+              <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+                <p style="font-size: 14px; color: #6b7280; margin: 0;">
+                  Con cariño,<br>
+                  <strong style="color: #111827;">El equipo de Huellitas Quiteñas</strong> 🐾
+                </p>
+              </div>
+            </div>
+
+            <div class="footer">
+              <p>Este es un correo automático, por favor no respondas a este mensaje.</p>
+              <p>Huellitas Quiteñas © ${new Date().getFullYear()}</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const text = `
+✅ Contraseña Actualizada - Huellitas Quiteñas
+
+Hola ${data.userName},
+
+Tu contraseña ha sido actualizada exitosamente.
+
+Cambio realizado el: ${new Date().toLocaleString("es-ES", { 
+  dateStyle: "full", 
+  timeStyle: "short" 
+})}
+
+Ya puedes iniciar sesión con tu nueva contraseña en cualquier momento.
+
+⚠️ ¿No realizaste este cambio?
+Si no fuiste tú quien cambió la contraseña, contacta inmediatamente con nuestro equipo de soporte.
+
+Con cariño,
+El equipo de Huellitas Quiteñas 🐾
+    `.trim();
+
+    return this.sendEmail({
+      to: data.to,
+      subject: "✅ Contraseña actualizada - Huellitas Quiteñas",
+      html,
+      text,
+    });
+  }
 }
 
 export const emailService = new EmailService();

@@ -2,7 +2,9 @@ import { Router } from "express";
 import { User } from "../models/User";
 import { signJwt } from "../utils/jwt";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { emailService } from "../services/emailService";
+import { PasswordResetToken } from "../models/PasswordResetToken";
 
 const router = Router();
 
@@ -196,6 +198,125 @@ router.post("/login", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Error de servidor" });
+  }
+});
+
+// Solicitud de recuperación de contraseña
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Validación de email
+    if (!email || !validateEmail(email)) {
+      return res.status(400).json({ error: "Email inválido" });
+    }
+
+    // Buscar usuario
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    // Por seguridad, siempre retornamos éxito aunque el usuario no exista
+    // Esto previene que atacantes puedan enumerar usuarios válidos
+    if (!user) {
+      return res.json({ 
+        message: "Si el email existe en nuestro sistema, recibirás instrucciones para recuperar tu contraseña" 
+      });
+    }
+
+    // Verificar que el usuario esté activo
+    if (user.status !== "ACTIVE" || !user.isActive) {
+      return res.json({ 
+        message: "Si el email existe en nuestro sistema, recibirás instrucciones para recuperar tu contraseña" 
+      });
+    }
+
+    // Eliminar tokens anteriores del usuario
+    await PasswordResetToken.deleteMany({ userId: user._id });
+
+    // Generar token seguro
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    // Guardar token en BD (expira en 1 hora)
+    await PasswordResetToken.create({
+      userId: user._id,
+      token: hashedToken,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
+    });
+
+    // Enviar email
+    const resetUrl = `${process.env.FRONTEND_URL || "http://localhost:5173"}/reset-password?token=${resetToken}`;
+    
+    await emailService.sendPasswordResetEmail({
+      to: user.email,
+      userName: user.profile?.firstName || "Usuario",
+      resetUrl,
+    });
+
+    res.json({ 
+      message: "Si el email existe en nuestro sistema, recibirás instrucciones para recuperar tu contraseña" 
+    });
+  } catch (error) {
+    console.error("Error en forgot-password:", error);
+    res.status(500).json({ error: "Error al procesar la solicitud" });
+  }
+});
+
+// Restablecer contraseña
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    // Validaciones
+    if (!token) {
+      return res.status(400).json({ error: "Token requerido" });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({ error: "Nueva contraseña requerida" });
+    }
+
+    // Validar formato de la nueva contraseña
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).json({ error: passwordValidation.error });
+    }
+
+    // Hash del token para buscar en BD
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Buscar token válido
+    const resetToken = await PasswordResetToken.findOne({
+      token: hashedToken,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!resetToken) {
+      return res.status(400).json({ error: "Token inválido o expirado" });
+    }
+
+    // Buscar usuario
+    const user = await User.findById(resetToken.userId);
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    // Actualizar contraseña
+    user.password = newPassword; // El pre-save hook se encargará del hash
+    await user.save();
+
+    // Eliminar token usado
+    await PasswordResetToken.deleteOne({ _id: resetToken._id });
+
+    // Enviar email de confirmación
+    await emailService.sendPasswordChangedEmail({
+      to: user.email,
+      userName: user.profile?.firstName || "Usuario",
+    });
+
+    res.json({ message: "Contraseña actualizada exitosamente" });
+  } catch (error) {
+    console.error("Error en reset-password:", error);
+    res.status(500).json({ error: "Error al restablecer contraseña" });
   }
 });
 
