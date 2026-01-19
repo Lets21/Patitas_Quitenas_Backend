@@ -38,11 +38,11 @@ export interface ApplicationDoc extends Document {
   scoreDetail: Record<string, { value: any; contribution: number }>;
   eligible: boolean;
   rejectReason?: string;
-  // ML/KNN Clasificador
+  // KNN Clasificador - Propensión de Adopción
   propensityPred?: number; // 0 o 1
   propensityProba?: number; // 0 a 1
   mlVersion?: string; // "knn-v1"
-  mlExplanation?: any; // Explicación detallada de la predicción ML
+  mlExplanation?: any; // Explicación detallada de la predicción KNN
   createdAt: Date;
   updatedAt: Date;
 }
@@ -190,7 +190,7 @@ const ApplicationSchema = new Schema<ApplicationDoc>(
       trim: true,
       required: false,
     },
-    // ========== CAMPOS PARA ML/KNN CLASIFICADOR ==========
+    // ========== CAMPOS PARA KNN CLASIFICADOR (PROPENSIÓN DE ADOPCIÓN) ==========
     propensityPred: {
       type: Number,
       enum: [0, 1],
@@ -209,7 +209,7 @@ const ApplicationSchema = new Schema<ApplicationDoc>(
       type: String,
       default: "knn-v1",
       required: false,
-      // Versión del modelo ML usado para tesis
+      // Versión del modelo KNN Clasificador usado para propensión
     },
     mlExplanation: {
       type: Schema.Types.Mixed,

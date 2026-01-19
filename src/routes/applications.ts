@@ -258,7 +258,7 @@ router.post("/", requireAuth, async (req: Request, res: Response, next: NextFunc
       scorePct: pct,
       scoreDetail: detail,
       eligible,
-      // Campos ML
+      // Campos ML - KNN Clasificador (Propensión de Adopción)
       propensityPred: pred,
       propensityProba: proba,
       mlVersion: "knn-v1",

@@ -99,7 +99,7 @@ app.use("/api/v1/appointments", appointmentsRouter); // el router decide auth/ro
 // Notificaciones de la fundación
 app.use("/api/v1/notifications", notificationsRouter);
 
-// Matching con KNN (requiere autenticación)
+// Sistema de Matching (requiere autenticación)
 app.use("/api/v1/matching", requireAuth, matchingRouter);
 
 /**

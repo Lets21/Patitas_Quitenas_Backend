@@ -1,5 +1,5 @@
 /**
- * KNN Matching Service - Implementación completa del algoritmo KNN
+ * Matching Service - Implementación del algoritmo de emparejamiento basado en distancia
  * Basado en modelo entrenado con dataset de PetFinder
  */
 

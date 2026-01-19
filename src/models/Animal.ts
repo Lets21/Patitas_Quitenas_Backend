@@ -80,7 +80,7 @@ const AnimalSchema = new Schema(
     compatibility: { type: CompatibilitySchema, required: false },
     clinicalHistory: { type: ClinicalHistorySchema, required: false },
     
-    // ========== CAMPOS PARA ML/KNN CLASIFICADOR ==========
+    // ========== CAMPOS PARA SISTEMA DE MATCHING ==========
     // Códigos numéricos según dataset PetFinder
     breed1Code: { type: Number, default: 0 }, // Breed1
     breed2Code: { type: Number, default: 0 }, // Breed2 (para mezclas)

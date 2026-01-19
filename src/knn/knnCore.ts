@@ -1,5 +1,5 @@
 /**
- * KNN Core Functions - Implementación del algoritmo KNN
+ * Matching Core Functions - Funciones núcleo del algoritmo de emparejamiento
  * Funciones de distancia, escalado y scoring basadas en el modelo entrenado
  */
 

@@ -184,13 +184,13 @@ router.get(
         }
       }
 
-      // Clasificación K-NN (basado en scorePct)
+      // Clasificación por Score de Compatibilidad
       const altaProbabilidad = await Application.countDocuments({ scorePct: { $gte: 70 } });
       const probabilidadMedia = await Application.countDocuments({ scorePct: { $gte: 40, $lt: 70 } });
       const bajaProbabilidad = await Application.countDocuments({ scorePct: { $lt: 40 } });
       const totalClasificados = altaProbabilidad + probabilidadMedia + bajaProbabilidad;
 
-      const datosKNN = totalClasificados > 0 ? [
+      const datosMatching = totalClasificados > 0 ? [
         {
           categoria: "Alta probabilidad",
           valor: Math.round((altaProbabilidad / totalClasificados) * 100),
@@ -256,7 +256,7 @@ router.get(
             fundacionActiva,
             adopcionesFundacion
           },
-          datosKNN,
+          datosMatching,
           datosAbandono: [
             { razon: "Falta de documentos", porcentaje: 19 },
             { razon: "Espacio inadecuado", porcentaje: 28 },

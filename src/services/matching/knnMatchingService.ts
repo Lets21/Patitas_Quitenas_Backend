@@ -1,6 +1,6 @@
 /**
- * Servicio de Matching con KNN (K-Nearest Neighbors)
- * Calcula la compatibilidad entre adoptantes y caninos usando distancia euclidiana
+ * Servicio de Matching basado en Distancia
+ * Calcula la compatibilidad entre adoptantes y caninos usando distancia euclidiana/manhattan
  */
 
 interface UserPreferences {

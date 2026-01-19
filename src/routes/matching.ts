@@ -80,6 +80,7 @@ router.get("/recommendations", verifyJWT, async (req, res) => {
             name: animal.name,
             photos: animal.photos,
             attributes: animal.attributes,
+            ageMonths: animal.ageMonths, // Edad en meses para cálculo preciso
             state: animal.state,
             clinicalSummary: animal.clinicalSummary,
             personality: animal.personality,
@@ -95,9 +96,9 @@ router.get("/recommendations", verifyJWT, async (req, res) => {
     return res.json({
       matches: validMatches,
       total: validMatches.length,
-      k: knnResult.k, // Número de vecinos considerados
+      k: knnResult.k, // Número de candidatos considerados
       totalAnimals: knnResult.totalAnimals, // Total de animales evaluados
-      algorithm: "KNN", // Indicar que es KNN real
+      algorithm: "DISTANCE_MATCHING", // Algoritmo de emparejamiento basado en distancia
       metric: "manhattan", // Métrica de distancia usada
       preferences: {
         preferredSize: preferences.preferredSize,
@@ -182,7 +183,7 @@ router.post("/calculate", verifyJWT, async (req, res) => {
           compatibility: (animal as any).compatibility,
         },
       },
-      algorithm: "KNN",
+      algorithm: "DISTANCE_MATCHING",
       metric: "manhattan",
     });
   } catch (error: any) {
@@ -246,7 +247,7 @@ router.get("/explain/:animalId", verifyJWT, async (req, res) => {
 
     return res.json({
       explanation,
-      algorithm: "KNN",
+      algorithm: "DISTANCE_MATCHING",
       metric: "manhattan",
       k: knnMatchingService.getK(),
       note: "Features normalizadas con StandardScaler del modelo entrenado"
@@ -344,7 +345,7 @@ router.get("/stats", verifyJWT, async (req, res) => {
       maxDistance: stats.maxDistance,
       topKThreshold: stats.topKThreshold,
       k: knnResult.k,
-      algorithm: "KNN",
+      algorithm: "DISTANCE_MATCHING",
       metric: "manhattan",
     });
   } catch (error: any) {
