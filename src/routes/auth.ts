@@ -5,6 +5,14 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { emailService } from "../services/emailService";
 import { PasswordResetToken } from "../models/PasswordResetToken";
+import { validateBody } from "../middleware/validation";
+import { 
+  registerSchema, 
+  loginSchema, 
+  forgotPasswordSchema, 
+  resetPasswordSchema 
+} from "../schemas/auth.schemas";
+import { authLimiter } from "../middleware/rateLimiter";
 
 const router = Router();
 
@@ -153,8 +161,8 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// Login
-router.post("/login", async (req, res) => {
+// Login con rate limiting
+router.post("/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     
@@ -201,8 +209,8 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// Solicitud de recuperación de contraseña
-router.post("/forgot-password", async (req, res) => {
+// Solicitud de recuperación de contraseña con rate limiting
+router.post("/forgot-password", authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 

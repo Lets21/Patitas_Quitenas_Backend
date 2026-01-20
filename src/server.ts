@@ -6,6 +6,8 @@ import type { CorsOptions, CorsOptionsDelegate } from "cors";
 import mongoose from "mongoose";
 import path from "path";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import { globalLimiter } from "./middleware/rateLimiter";
 
 // Middlewares
 import { requireAuth, requireRole } from "./middleware/auth";
@@ -25,6 +27,28 @@ import notificationsRouter from "./routes/notifications";
 import matchingRouter from "./routes/matching";
 
 const app = express();
+
+/* ------------------------------- Security ------------------------------- */
+// Helmet: Security headers siguiendo mejores prácticas OWASP
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Para compatibilidad con Cloudinary
+}));
+
+// Rate limiting global: previene ataques de fuerza bruta
+app.use(globalLimiter);
 
 /* ------------------------------- CORS ------------------------------- */
 const allowedFromEnv = (process.env.CORS_ORIGIN || "")
