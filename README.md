@@ -120,10 +120,6 @@ No todos corresponden a Machine Learning supervisado, lo que se aclara explícit
 
 ### (Recomendación Personalizada)
 
-### ✔️ Enfoque Correcto
-
-Este sistema **NO utiliza KNN ni aprendizaje supervisado**.
-
 ### 🧠 Algoritmo Utilizado
 
 **Nombre técnico:**
