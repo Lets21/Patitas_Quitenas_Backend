@@ -299,6 +299,3 @@ Este backend forma parte del proyecto de tesis **Huellitas Quiteñas**, cuyo obj
 Proyecto desarrollado con fines académicos y sociales.
 
 ---
-
-
-Tienes un backend **muy bien planteado** y ahora está **conceptualmente impecable**.
