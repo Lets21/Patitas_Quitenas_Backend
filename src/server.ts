@@ -56,8 +56,8 @@ const allowedFromEnv = (process.env.CORS_ORIGIN || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// Permite previews de Vercel: https://patitas-quitenas-<hash>.vercel.app
-const vercelPreview = /^https:\/\/patitas-quitenas-[a-z0-9-]+\.vercel\.app$/i;
+// Dominio principal de producción
+const mainDomain = "https://www.huellitasquitenas.com";
 
 // En dev, asegura front local
 if (!allowedFromEnv.includes("http://localhost:5173")) {
@@ -66,7 +66,7 @@ if (!allowedFromEnv.includes("http://localhost:5173")) {
 
 const corsDelegate: CorsOptionsDelegate = (req, cb) => {
   const origin = (req.headers.origin as string) || "";
-  const allow = !origin || allowedFromEnv.includes(origin) || vercelPreview.test(origin);
+  const allow = !origin || allowedFromEnv.includes(origin) || origin === mainDomain;
 
   const opts: CorsOptions = {
     origin: allow,
