@@ -220,10 +220,3 @@ Este script intentará mapear automáticamente los valores existentes a códigos
 
 ---
 
-## 🎯 Recomendación para la Tesis
-
-Para mejor precisión del modelo:
-1. **Configura manualmente** los códigos de los primeros 20-30 perros
-2. **Usa valores reales** en lugar de defaults cuando sea posible
-3. **Documenta** qué código usaste para cada raza en tu región
-4. **Valida** que las predicciones tengan sentido con los códigos asignados
