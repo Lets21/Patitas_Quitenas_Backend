@@ -1,0 +1,2512 @@
+# ANÁLISIS COMPLETO DEL PROYECTO - HUELLITAS QUITEÑAS
+
+> **Documento de Análisis Técnico**  
+> Fecha: Enero 2026  
+> Versión: 1.0
+
+---
+
+## DESCRIPCIÓN GENERAL
+
+**Huellitas Quiteñas** es un sistema web integral de adopción de mascotas que implementa Machine Learning para realizar matching inteligente entre adoptantes y animales. El proyecto utiliza una arquitectura de microservicios moderna con prácticas DevSecOps.
+
+### Objetivos del Sistema
+- Facilitar el proceso de adopción de mascotas
+- Matching inteligente adoptante-mascota usando ML
+- Gestión integral para fundaciones y clínicas veterinarias
+- Seguimiento completo del proceso de adopción
+- Predicción de propensión de adopción usando KNN
+
+---
+
+## ARQUITECTURA DEL SISTEMA
+
+### **Stack Tecnológico Completo**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ARQUITECTURA GENERAL                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐      ┌──────────────┐    ┌─────────────┐ │
+│  │   FRONTEND   │◄────►│   BACKEND    │◄──►│  ML SERVICE │ │
+│  │  React 18    │      │  Node.js +   │    │   Python +  │ │
+│  │  TypeScript  │      │  Express.js  │    │   FastAPI   │ │
+│  │   + Vite     │      │  TypeScript  │    │   scikit    │ │
+│  └──────────────┘      └──────┬───────┘    └─────────────┘ │
+│                                │                             │
+│                                ▼                             │
+│                        ┌──────────────┐                      │
+│                        │   MongoDB    │                      │
+│                        │  (Mongoose)  │                      │
+│                        └──────────────┘                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Componentes Principales
+1. **Frontend (SPA)**: Interfaz de usuario en React
+2. **Backend (API REST)**: Lógica de negocio y gestión de datos
+3. **ML Service**: Servicio de predicción con Machine Learning
+4. **Base de Datos**: MongoDB para persistencia
+
+---
+
+## 1. BACKEND - API REST (Node.js + TypeScript + Express)
+
+### **Librerías y Tecnologías Principales**
+
+#### **Core Framework**
+```json
+{
+  "express": "^4.21.2",      // Framework web para Node.js
+  "typescript": "^5.9.3",    // Type safety y desarrollo moderno
+  "node": "20.x"             // Runtime JavaScript
+}
+```
+
+#### **Base de Datos**
+```json
+{
+  "mongoose": "^8.18.3"      // ODM para MongoDB
+}
+```
+
+**Características:**
+- Esquemas tipados con TypeScript
+- Validación integrada
+- Middleware de población (refs)
+- Índices optimizados
+
+#### **Seguridad (DevSecOps)**
+
+##### Helmet.js - Security Headers OWASP
+```typescript
+// backend/src/server.ts
+import helmet from "helmet";
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Para compatibilidad con Cloudinary
+}));
+```
+
+**Protecciones Implementadas:**
+- ✅ XSS (Cross-Site Scripting)
+- ✅ Clickjacking
+- ✅ MIME type sniffing
+- ✅ DNS Prefetch attacks
+- ✅ Force HTTPS (HSTS)
+
+##### Librerías de Seguridad
+```json
+{
+  "helmet": "^8.1.0",              // Security headers OWASP
+  "bcryptjs": "^2.4.3",            // Hash de contraseñas (10 rounds)
+  "jsonwebtoken": "^9.0.2",        // Autenticación JWT
+  "express-rate-limit": "^8.2.1",  // Rate limiting anti brute-force
+  "zod": "^4.3.5"                  // Validación de schemas en runtime
+}
+```
+
+##### Validación con Zod
+```typescript
+// backend/src/schemas/auth.schemas.ts
+import { z } from "zod";
+
+export const registerSchema = z.object({
+  name: z.string()
+    .min(2, "El nombre debe tener al menos 2 caracteres")
+    .max(100, "El nombre no puede exceder 100 caracteres")
+    .trim(),
+  
+  email: z.string()
+    .email("Email inválido")
+    .toLowerCase()
+    .trim()
+    .max(255, "El email no puede exceder 255 caracteres"),
+  
+  password: z.string()
+    .min(8, "La contraseña debe tener al menos 8 caracteres")
+    .max(128, "La contraseña no puede exceder 128 caracteres")
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+      "La contraseña debe contener al menos una mayúscula, una minúscula y un número"
+    ),
+  
+  phone: z.string()
+    .regex(/^\+?[0-9]{10,15}$/, "Número de teléfono inválido")
+    .optional(),
+});
+
+export const loginSchema = z.object({
+  email: z.string()
+    .email("Email inválido")
+    .toLowerCase()
+    .trim(),
+  
+  password: z.string()
+    .min(1, "La contraseña es requerida")
+    .max(128, "Contraseña inválida"),
+});
+```
+
+**Validaciones Implementadas:**
+- Formato de email
+- Fortaleza de contraseña (min 8 chars, mayúsculas, minúsculas, números)
+- Sanitización de inputs
+- Type safety en runtime
+- Prevención de inyección SQL/NoSQL
+- Prevención de XSS
+
+##### Rate Limiting
+```typescript
+// backend/src/middleware/rateLimiter.ts
+import rateLimit from "express-rate-limit";
+
+/**
+ * Rate limiting global: previene ataques de fuerza bruta
+ * Límite de 100 requests por IP cada 15 minutos
+ */
+export const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,    // 15 minutos
+  max: 100,                     // Límite de 100 requests por IP
+  message: "Demasiadas peticiones desde esta IP, intenta más tarde",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * Rate limiting específico para autenticación (más restrictivo)
+ * 10 intentos de login/forgot-password cada 15 minutos
+ */
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,    // 15 minutos
+  max: 10,                      // 10 intentos
+  message: "Demasiados intentos de inicio de sesión, intenta en 15 minutos",
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+```
+
+**Protecciones:**
+- Prevención de ataques de fuerza bruta
+- Mitigación de DDoS
+- Rate limiting por endpoint
+- Headers estándar de rate limit
+
+##### Autenticación JWT
+```typescript
+// backend/src/middleware/auth.ts
+import type { Request, Response, NextFunction } from "express";
+import { verifyJwt } from "../utils/jwt";
+
+const COOKIE_NAME = (process.env.COOKIE_NAME || "auth").trim();
+
+function extractToken(req: Request): string | null {
+  const raw = req.headers.authorization || req.headers.Authorization;
+  const bearer = raw?.startsWith("Bearer ") ? raw.slice(7) : undefined;
+  const fromCookie = req.cookies?.[COOKIE_NAME];
+  return bearer || fromCookie || null;
+}
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const token = extractToken(req);
+  if (!token) return res.status(401).json({ error: "No token provided" });
+  
+  try {
+    const payload = verifyJwt(token);
+    if (payload.type && payload.type !== "access") {
+      return res.status(401).json({ error: "Token inválido" });
+    }
+    (req as any).user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token inválido o expirado" });
+  }
+}
+
+export function requireRole(...roles: string[]) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = (req as any).user;
+    if (!user) return res.status(401).json({ error: "No token provided" });
+    if (!roles.includes(user.role)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    next();
+  };
+}
+```
+
+**Características de Seguridad:**
+- JWT tokens firmados con HS256
+- Extracción de token desde Header o Cookie
+- Validación de tipo de token
+- Control de acceso basado en roles (RBAC)
+- Manejo de expiración de tokens
+
+#### **Manejo de Archivos e Imágenes**
+```json
+{
+  "cloudinary": "^2.8.0",   // CDN para almacenamiento de imágenes
+  "multer": "^2.0.2"        // Upload de archivos multipart/form-data
+}
+```
+
+```typescript
+// backend/src/config/cloudinary.ts
+import { v2 as cloudinary } from "cloudinary";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+export default cloudinary;
+```
+
+**Ventajas de Cloudinary:**
+- CDN global para carga rápida
+- Transformación de imágenes on-the-fly
+- Optimización automática
+- Respaldo automático
+- No carga el servidor principal
+
+#### **Email y Notificaciones**
+```json
+{
+  "@sendgrid/mail": "^8.1.6",  // Servicio de email transaccional
+  "nodemailer": "^7.0.6",      // Alternativa de envío de emails
+  "resend": "^6.5.2"           // Servicio moderno de emails
+}
+```
+
+**Casos de Uso:**
+- Confirmación de registro
+- Recuperación de contraseña
+- Notificaciones de solicitudes
+- Updates de estado de adopción
+
+#### **HTTP y Comunicación**
+```json
+{
+  "axios": "^1.13.2",        // Cliente HTTP para ML Service
+  "cors": "^2.8.5",          // Cross-Origin Resource Sharing
+  "cookie-parser": "^1.4.7"  // Parsing de cookies
+}
+```
+
+#### **Testing**
+```json
+{
+  "jest": "^29.0.0",        // Framework de testing
+  "supertest": "^6.3.0",    // Testing de endpoints HTTP
+  "ts-jest": "^29.0.0"      // Jest para TypeScript
+}
+```
+
+**Cobertura de Tests:**
+- ✅ 11 test suites
+- ✅ Models tests
+- ✅ Routes tests
+- ✅ Middleware tests
+- ✅ Service tests
+
+---
+
+### **Modelos de Datos Principales**
+
+#### **Animal Model**
+```typescript
+// backend/src/models/Animal.ts
+import { Schema, model, Types } from "mongoose";
+
+export type AnimalState = "AVAILABLE" | "RESERVED" | "ADOPTED";
+
+const AnimalSchema = new Schema(
+  {
+    name: { type: String, required: true, index: true },
+    photos: { type: [String], default: [] },
+    
+    attributes: {
+      age: { type: Number, required: true },
+      size: { type: String, enum: ["SMALL", "MEDIUM", "LARGE"], required: true },
+      breed: { type: String, required: true },
+      gender: { type: String, enum: ["MALE", "FEMALE"], required: true },
+      energy: { type: String, enum: ["LOW", "MEDIUM", "HIGH"], required: true },
+      coexistence: {
+        children: { type: Boolean, default: false },
+        cats: { type: Boolean, default: false },
+        dogs: { type: Boolean, default: false },
+      },
+      
+      // ========== CAMPOS ML LEGIBLES (HUMAN-READABLE) ==========
+      breed2: { type: String, default: null },
+      color1: { type: String, default: "Brown" },
+      color2: { type: String, default: null },
+      color3: { type: String, default: null },
+      maturitySize: { type: String, enum: ["Small", "Medium", "Large", "Extra Large"] },
+      furLength: { type: String, enum: ["Short", "Medium", "Long"] },
+      vaccinated: { type: String, enum: ["Yes", "No", "Not Sure"] },
+      dewormed: { type: String, enum: ["Yes", "No", "Not Sure"] },
+      sterilized: { type: String, enum: ["Yes", "No", "Not Sure"] },
+      health: { type: String, enum: ["Healthy", "Minor Injury", "Serious Injury"] },
+      fee: { type: Number, default: 0 },
+    },
+    
+    ageMonths: { type: Number },
+    clinicalSummary: { type: String, default: "" },
+    state: { type: String, enum: ["AVAILABLE", "RESERVED", "ADOPTED"], default: "AVAILABLE" },
+    foundationId: { type: Types.ObjectId, ref: "User", required: true },
+    
+    personality: {
+      sociability: { type: Number, min: 1, max: 5 },
+      energy: { type: Number, min: 1, max: 5 },
+      training: { type: Number, min: 1, max: 5 },
+      adaptability: { type: Number, min: 1, max: 5 },
+    },
+    
+    compatibility: {
+      kids: { type: Boolean },
+      cats: { type: Boolean },
+      dogs: { type: Boolean },
+      apartment: { type: Boolean },
+    },
+    
+    // ========== CAMPOS PARA SISTEMA DE MATCHING ML ==========
+    breed1Code: { type: Number, default: 0 },
+    breed2Code: { type: Number, default: 0 },
+    genderCode: { type: Number, default: 0 },
+    color1Code: { type: Number, default: 0 },
+    color2Code: { type: Number, default: 0 },
+    color3Code: { type: Number, default: 0 },
+    maturitySizeCode: { type: Number, default: 0 },
+    furLengthCode: { type: Number, default: 0 },
+    vaccinatedCode: { type: Number, default: 3 },
+    dewormedCode: { type: Number, default: 3 },
+    sterilizedCode: { type: Number, default: 3 },
+    healthCode: { type: Number, default: 1 },
+    adoptionFee: { type: Number, default: 0 },
+    photoCount: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+);
+
+export const Animal = model("Animal", AnimalSchema);
+```
+
+**Características:**
+- Campos legibles para humanos y códigos para ML
+- Estado de adopción con índice
+- Metadata de personalidad y compatibilidad
+- Referencia a fundación propietaria
+- Timestamps automáticos
+
+#### **Application Model**
+```typescript
+// backend/src/models/Application.ts
+import { Schema, model, Types, Document } from "mongoose";
+
+export type ApplicationStatus =
+  | "RECEIVED"
+  | "IN_REVIEW"
+  | "HOME_VISIT"
+  | "APPROVED"
+  | "REJECTED";
+
+export interface ApplicationDoc extends Document {
+  animalId: Types.ObjectId;
+  adopterId: Types.ObjectId;
+  foundationId: Types.ObjectId;
+  form: {
+    homeType?: "casa" | "departamento" | "otro";
+    hasYard?: boolean;
+    hasChildren?: boolean;
+    otherPets?: "ninguno" | "perro" | "gato" | "ambos" | string;
+    activityLevel?: "bajo" | "medio" | "alto";
+    hoursAway?: number;
+    budget?: "básico" | "medio" | "alto" | string;
+    experience?: "primera_vez" | "con_experiencia" | string;
+    notes?: string;
+    familyDecision?: "agree" | "accept" | "indifferent" | "disagree";
+    monthlyBudget?: "high" | "medium" | "low";
+    allowVisits?: "yes" | "no";
+    acceptSterilization?: "yes" | "no";
+    housing?: "Casa urbana" | "Casa de campo" | "Departamento" | "Quinta" | "Hacienda" | "Otro";
+    relationAnimals?: "positive" | "neutral" | "negative";
+    travelPlans?: "withOwner" | "withFamily" | "withFriend" | "paidCaretaker" | "hotel" | "other";
+    behaviorResponse?: "trainOrAccept" | "seekHelp" | "punish" | "abandon";
+    careCommitment?: "fullCare" | "mediumCare" | "lowCare";
+  };
+  status: ApplicationStatus;
+  scorePct: number;
+  scoreDetail: Record<string, { value: any; contribution: number }>;
+  eligible: boolean;
+  rejectReason?: string;
+  
+  // ========== KNN CLASIFICADOR - PROPENSIÓN DE ADOPCIÓN ==========
+  propensityPred?: number;      // 0 o 1
+  propensityProba?: number;     // 0.0 a 1.0
+  mlVersion?: string;           // "knn-v1"
+  mlExplanation?: any;          // Explicación detallada
+  
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const ApplicationSchema = new Schema<ApplicationDoc>(
+  {
+    animalId: { type: Schema.Types.ObjectId, ref: "Animal", required: true, index: true },
+    adopterId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    foundationId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    form: { /* ... campos del formulario ... */ },
+    status: { type: String, enum: ["RECEIVED", "IN_REVIEW", "HOME_VISIT", "APPROVED", "REJECTED"] },
+    scorePct: { type: Number, min: 0, max: 100 },
+    scoreDetail: { type: Map, of: Schema.Types.Mixed },
+    eligible: { type: Boolean, default: true },
+    rejectReason: { type: String },
+    propensityPred: { type: Number, min: 0, max: 1 },
+    propensityProba: { type: Number, min: 0, max: 1 },
+    mlVersion: { type: String },
+    mlExplanation: { type: Schema.Types.Mixed },
+  },
+  { timestamps: true }
+);
+
+export const Application = model<ApplicationDoc>("Application", ApplicationSchema);
+```
+
+**Características:**
+- Workflow de aprobación con estados
+- Sistema de scoring automático
+- Predicción ML de propensión de adopción
+- Explicabilidad del modelo (vecinos cercanos)
+- Índices en relaciones para performance
+
+#### **User Model**
+```typescript
+// backend/src/models/User.ts
+const UserSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
+    password: { type: String, required: true },
+    role: { 
+      type: String, 
+      enum: ["ADOPTER", "FOUNDATION", "CLINIC", "ADMIN"], 
+      default: "ADOPTER" 
+    },
+    phone: { type: String },
+    address: { type: String },
+    profileImage: { type: String },
+    verified: { type: Boolean, default: false },
+    
+    profile: {
+      preferences: {
+        completed: { type: Boolean, default: false },
+        size: [String],
+        energy: [String],
+        ageGroup: String,
+        hasPets: Boolean,
+        hasChildren: Boolean,
+        hasYard: Boolean,
+        activityLevel: String,
+        experience: String,
+      },
+    },
+  },
+  { timestamps: true }
+);
+```
+
+**Roles del Sistema:**
+- **ADOPTER**: Usuarios que buscan adoptar
+- **FOUNDATION**: Fundaciones que publican animales
+- **CLINIC**: Clínicas veterinarias
+- **ADMIN**: Administradores del sistema
+
+---
+
+### **Sistema de Matching KNN**
+
+#### **KNN Service - Algoritmo de Matching**
+```typescript
+// backend/src/knn/knnService.ts
+import { knnConfig } from './knnConfig';
+import { standardScale, distance, distanceToScore } from './knnCore';
+import { buildAnimalFeatureVector, buildAdopterFeatureVector } from './featureMapping';
+
+export interface MatchResult {
+  animalId: string;
+  animalName: string;
+  distance: number;         // Distancia Manhattan
+  score: number;            // 0-100 (convertido de distancia)
+  rank: number;             // Posición en el ranking (1 = mejor)
+  isTopK: boolean;          // Si está en los K mejores vecinos
+  featureVector: number[];  // Vector de features del animal
+  scaledVector: number[];   // Vector escalado
+}
+
+export interface KnnRecommendationResult {
+  topMatches: MatchResult[];
+  allMatches: MatchResult[];
+  adopterVector: number[];
+  adopterScaledVector: number[];
+  k: number;
+  totalAnimals: number;
+}
+
+export class KnnMatchingService {
+  private k: number;
+
+  constructor(k?: number) {
+    this.k = k ?? knnConfig.n_neighbors; // Default: 15
+  }
+
+  public knnRecommend(
+    adopterPrefs: UserPreferences,
+    animals: Animal[]
+  ): KnnRecommendationResult {
+    if (animals.length === 0) {
+      return {
+        topMatches: [],
+        allMatches: [],
+        adopterVector: [],
+        adopterScaledVector: [],
+        k: this.k,
+        totalAnimals: 0
+      };
+    }
+
+    // 1. Construir vector del adoptante
+    const adopterVector = buildAdopterFeatureVector(adopterPrefs);
+    
+    // 2. Escalar vector del adoptante (StandardScaler)
+    const adopterScaledVector = standardScale(adopterVector);
+
+    // 3. Calcular distancia con cada animal
+    const matches: MatchResult[] = animals.map((animal: any) => {
+      const animalVector = buildAnimalFeatureVector(animal);
+      const animalScaledVector = standardScale(animalVector);
+      
+      // Distancia Manhattan en espacio escalado
+      const dist = distance(adopterScaledVector, animalScaledVector);
+      
+      // Convertir distancia a score (0-100)
+      const score = distanceToScore(dist);
+
+      return {
+        animalId: animal.id || animal._id?.toString() || '',
+        animalName: animal.name || 'Sin nombre',
+        distance: dist,
+        score: score,
+        rank: 0,
+        isTopK: false,
+        featureVector: animalVector,
+        scaledVector: animalScaledVector
+      };
+    });
+
+    // 4. Ordenar por distancia (menor = mejor match)
+    matches.sort((a, b) => a.distance - b.distance);
+
+    // 5. Asignar ranks y marcar top K
+    matches.forEach((match, idx) => {
+      match.rank = idx + 1;
+      match.isTopK = idx < this.k;
+    });
+
+    const topMatches = matches.slice(0, this.k);
+
+    return {
+      topMatches,
+      allMatches: matches,
+      adopterVector,
+      adopterScaledVector,
+      k: this.k,
+      totalAnimals: animals.length
+    };
+  }
+}
+
+export const knnMatchingService = new KnnMatchingService();
+```
+
+**Características del Algoritmo:**
+- **Métrica**: Distancia Manhattan (L1)
+- **K vecinos**: 15 (configurable)
+- **Escalado**: StandardScaler (media=0, std=1)
+- **Score**: Convertido de distancia a escala 0-100
+- **Explicabilidad**: Retorna vectores y distancias para debugging
+
+#### **KNN Core - Funciones Matemáticas**
+```typescript
+// backend/src/knn/knnCore.ts
+import { knnConfig } from './knnConfig';
+
+/**
+ * Escala un vector usando StandardScaler
+ * x_scaled = (x - mean) / std
+ */
+export function standardScale(vector: number[]): number[] {
+  const mean = knnConfig.scaler_mean;
+  const std = knnConfig.scaler_std;
+  
+  return vector.map((val, i) => {
+    const m = mean[i] || 0;
+    const s = std[i] || 1;
+    return s === 0 ? 0 : (val - m) / s;
+  });
+}
+
+/**
+ * Calcula distancia Manhattan (L1) entre dos vectores
+ * d = Σ|x_i - y_i|
+ */
+export function distance(v1: number[], v2: number[]): number {
+  if (v1.length !== v2.length) {
+    throw new Error(`Vector length mismatch: ${v1.length} vs ${v2.length}`);
+  }
+  
+  return v1.reduce((sum, val, i) => sum + Math.abs(val - v2[i]), 0);
+}
+
+/**
+ * Convierte distancia a score 0-100
+ * Menor distancia = Mayor score
+ */
+export function distanceToScore(dist: number): number {
+  const maxDist = 50; // Distancia máxima esperada
+  const normalized = Math.max(0, Math.min(1, dist / maxDist));
+  return Math.round((1 - normalized) * 100);
+}
+```
+
+**Fórmulas Utilizadas:**
+- **Escalado**: `x_scaled = (x - μ) / σ`
+- **Distancia Manhattan**: `d = Σ|x_i - y_i|`
+- **Score**: `score = (1 - min(d/d_max, 1)) × 100`
+
+#### **Feature Mapping**
+```typescript
+// backend/src/knn/featureMapping.ts
+export function buildAnimalFeatureVector(animal: Animal): number[] {
+  return [
+    animal.ageMonths || 0,
+    animal.genderCode || 0,
+    animal.breed1Code || 0,
+    animal.breed2Code || 0,
+    animal.color1Code || 0,
+    animal.color2Code || 0,
+    animal.color3Code || 0,
+    animal.maturitySizeCode || 0,
+    animal.furLengthCode || 0,
+    animal.vaccinatedCode || 3,
+    animal.dewormedCode || 3,
+    animal.sterilizedCode || 3,
+    animal.healthCode || 1,
+    animal.adoptionFee || 0,
+    animal.photoCount || 0,
+  ];
+}
+
+export function buildAdopterFeatureVector(prefs: UserPreferences): number[] {
+  // Construye vector basado en preferencias del adoptante
+  // Mapea preferencias a códigos numéricos
+  // Retorna vector de 15 features
+}
+```
+
+---
+
+### **Integración con ML Service**
+
+```typescript
+// backend/src/services/mlClient.ts
+import axios from "axios";
+
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://localhost:8001";
+
+export async function predictAdoptionPropensity(
+  featurePayload: Record<string, any>
+) {
+  const url = `${ML_SERVICE_URL}/predict`;
+  const { data } = await axios.post(url, featurePayload, { timeout: 8000 });
+  
+  console.log(" DATOS DEL ML SERVICE:");
+  console.log(`   pred: ${data.pred}`);
+  console.log(`   proba: ${(data.proba_adopta_1 * 100).toFixed(1)}%`);
+  
+  if (data.explanation) {
+    console.log(`   Vecinos adoptados: ${data.explanation.adopted_neighbors}/15`);
+    console.log(`   Vecinos NO adoptados: ${data.explanation.not_adopted_neighbors}/15`);
+    
+    const porcentaje = (data.explanation.adopted_neighbors / 15 * 100).toFixed(1);
+    const coherente = Math.abs(Number(porcentaje) - (data.proba_adopta_1 || 0) * 100) < 20;
+    console.log(`   Coherencia: ${coherente ? '✅' : '⚠️'}`);
+  }
+  
+  return { 
+    pred: data.pred, 
+    proba_adopta_1: data.proba_adopta_1,
+    explanation: data.explanation || null
+  };
+}
+```
+
+---
+
+### **Rutas Principales del Backend**
+
+```typescript
+// backend/src/server.ts
+import express from "express";
+
+// ========== RUTAS PÚBLICAS ==========
+app.use("/api/v1/auth", authRouter);              // Autenticación y registro
+app.use("/api/v1/animals", animalsRoutes);        // Catálogo público de animales
+app.use("/api/v1/contact", contactRouter);        // Formulario de contacto
+
+// ========== RUTAS AUTENTICADAS ==========
+app.use("/api/v1/users", requireAuth, usersRouter);                    // Perfil de usuario
+app.use("/api/v1/applications", requireAuth, applicationsRouter);      // Solicitudes de adopción
+app.use("/api/v1/matching", requireAuth, matchingRouter);              // Recomendaciones KNN
+app.use("/api/v1/appointments", requireAuth, appointmentsRouter);      // Citas veterinarias
+app.use("/api/v1/notifications", requireAuth, notificationsRouter);    // Notificaciones
+
+// ========== RUTAS PROTEGIDAS POR ROL ==========
+app.use("/api/v1/foundation", requireAuth, requireRole("FOUNDATION"), foundationRoutes);
+app.use("/api/v1/foundation/animals", requireAuth, requireRole("FOUNDATION"), foundationAnimalsRoutes);
+app.use("/api/v1/clinic", requireAuth, requireRole("CLINIC"), clinicRoutes);
+app.use("/api/v1/admin", requireAuth, requireRole("ADMIN"), adminRoutes);
+```
+
+**Endpoints Principales:**
+
+##### Autenticación
+- `POST /api/v1/auth/register` - Registro de usuario
+- `POST /api/v1/auth/login` - Inicio de sesión
+- `POST /api/v1/auth/logout` - Cierre de sesión
+- `POST /api/v1/auth/forgot-password` - Recuperación de contraseña
+- `POST /api/v1/auth/reset-password` - Resetear contraseña
+- `GET /api/v1/auth/verify-email` - Verificar email
+
+##### Animales
+- `GET /api/v1/animals` - Listar animales disponibles (con filtros)
+- `GET /api/v1/animals/:id` - Detalle de un animal
+- `POST /api/v1/foundation/animals` - Crear animal (FOUNDATION)
+- `PUT /api/v1/foundation/animals/:id` - Actualizar animal (FOUNDATION)
+- `DELETE /api/v1/foundation/animals/:id` - Eliminar animal (FOUNDATION)
+
+##### Matching KNN
+- `GET /api/v1/matching/recommendations` - Obtener recomendaciones personalizadas
+
+##### Solicitudes
+- `POST /api/v1/applications` - Crear solicitud de adopción
+- `GET /api/v1/applications` - Listar solicitudes del usuario
+- `GET /api/v1/applications/:id` - Detalle de solicitud
+- `PATCH /api/v1/applications/:id/status` - Actualizar estado (FOUNDATION)
+
+---
+
+## 2. FRONTEND - SPA React (React 18 + TypeScript + Vite)
+
+### **Librerías y Tecnologías Principales**
+
+#### **Core Framework**
+```json
+{
+  "react": "^18.3.1",           // Librería UI con Hooks
+  "react-dom": "^18.3.1",       // Renderizado DOM
+  "typescript": "^5.9.3",       // Type safety
+  "vite": "^5.4.20",            // Build tool moderna y rápida
+  "react-router-dom": "^7.9.3"  // Enrutamiento SPA
+}
+```
+
+#### **Estado Global y Data Fetching**
+```json
+{
+  "zustand": "^5.0.8",                      // State management ligero
+  "@tanstack/react-query": "^5.90.2"       // Data fetching, caching, sync
+}
+```
+
+**Zustand - Estado Global Simple:**
+```typescript
+// project/src/lib/auth.ts
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      user: null,
+      token: null,
+      
+      login: async (email, password) => {
+        const { user, token } = await apiClient.login(email, password);
+        set({ user, token });
+      },
+      
+      logout: () => {
+        set({ user: null, token: null });
+      },
+    }),
+    { name: 'auth-storage' }
+  )
+);
+```
+
+**React Query - Data Fetching:**
+```typescript
+// Ejemplo de uso en componentes
+import { useQuery } from '@tanstack/react-query';
+
+function CatalogPage() {
+  const { data: animals, isLoading } = useQuery({
+    queryKey: ['animals', filters],
+    queryFn: () => apiClient.getAnimals(filters),
+    staleTime: 5 * 60 * 1000, // 5 minutos
+  });
+  
+  if (isLoading) return <LoadingSpinner />;
+  
+  return <AnimalGrid animals={animals} />;
+}
+```
+
+#### **Formularios y Validación**
+```json
+{
+  "react-hook-form": "^7.63.0",        // Manejo de formularios performante
+  "@hookform/resolvers": "^5.2.2",     // Integración con validadores
+  "zod": "^4.1.11"                     // Validación de schemas
+}
+```
+
+**Ejemplo de Formulario:**
+```typescript
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const loginSchema = z.object({
+  email: z.string().email('Email inválido'),
+  password: z.string().min(8, 'Mínimo 8 caracteres'),
+});
+
+function LoginForm() {
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    resolver: zodResolver(loginSchema),
+  });
+  
+  const onSubmit = (data) => {
+    // Datos ya validados
+    apiClient.login(data.email, data.password);
+  };
+  
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <input {...register('email')} />
+      {errors.email && <span>{errors.email.message}</span>}
+      
+      <input type="password" {...register('password')} />
+      {errors.password && <span>{errors.password.message}</span>}
+      
+      <button type="submit">Iniciar Sesión</button>
+    </form>
+  );
+}
+```
+
+#### **UI y Estilos**
+```json
+{
+  "tailwindcss": "^3.4.1",            // Framework CSS utility-first
+  "@headlessui/react": "^2.2.9",      // Componentes accesibles sin estilos
+  "lucide-react": "^0.344.0",         // Iconos SVG modernos
+  "clsx": "^2.1.1"                    // Utility para conditional classNames
+}
+```
+
+**TailwindCSS - Sistema de Diseño:**
+```javascript
+// project/tailwind.config.js
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#E8F5E8',
+          500: '#2E7D32',  // Verde principal
+          600: '#1B5E20',
+        },
+        accent: {
+          50: '#FFF3E0',
+          500: '#FB8C00',  // Naranja
+          600: '#EF6C00',
+        },
+        surface: {
+          100: '#F2E9E4',  // Beige suave
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+        serif: ['Lora', 'serif'],
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
+#### **Utilidades**
+```json
+{
+  "axios": "^1.12.2",           // Cliente HTTP
+  "date-fns": "^4.1.0",         // Manipulación de fechas
+  "jspdf": "^3.0.3",            // Generación de PDFs
+  "recharts": "^3.2.1",         // Gráficos y visualizaciones
+  "react-hot-toast": "^2.6.0"   // Notificaciones toast
+}
+```
+
+---
+
+### **Configuración del Proyecto**
+
+#### **Vite Config**
+```typescript
+// project/vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: { 
+    alias: { 
+      "@": path.resolve(__dirname, "./src") 
+    } 
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      }
+    }
+  }
+});
+```
+
+**Ventajas de Vite:**
+- ⚡ Hot Module Replacement (HMR) instantáneo
+- 📦 Build optimizado con Rollup
+- 🔧 Config mínima
+- ⚙️ Soporte nativo TypeScript
+
+#### **TypeScript Config**
+```json
+// project/tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+```
+
+---
+
+### **Componentes Principales**
+
+#### **Sistema de Rutas**
+```tsx
+// project/src/app/routes.tsx
+import { Routes, Route } from "react-router-dom";
+import { RequireAuth } from "./guards/RequireAuth";
+import { RequireRole } from "./guards/RequireRole";
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* ========== RUTAS PÚBLICAS ========== */}
+      <Route element={<PublicShell />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/catalog" element={<CatalogPage />} />
+        <Route path="/animals/:id" element={<AnimalDetailPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+      </Route>
+
+      {/* ========== RUTAS AUTENTICADAS ========== */}
+      <Route element={<RequireAuth />}>
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/recommendations" element={<RecommendationsPage />} />
+        <Route path="/applications" element={<MyApplicationsPage />} />
+        <Route path="/appointments" element={<MyAppointmentsPage />} />
+        <Route path="/adopt/:id" element={<AdoptApplyPage />} />
+      </Route>
+
+      {/* ========== PANEL FUNDACIÓN ========== */}
+      <Route element={<RequireRole roles={["FOUNDATION"]} />}>
+        <Route path="/foundation" element={<FoundationLayout />}>
+          <Route index element={<FoundationDashboard />} />
+          <Route path="animals" element={<FoundationAnimalsPage />} />
+          <Route path="animals/new" element={<CreateAnimalPage />} />
+          <Route path="applications" element={<ApplicationsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+        </Route>
+      </Route>
+
+      {/* ========== PANEL CLÍNICA ========== */}
+      <Route element={<RequireRole roles={["CLINIC"]} />}>
+        <Route path="/clinic" element={<ClinicLayout />}>
+          <Route index element={<ClinicDashboard />} />
+          <Route path="appointments" element={<AppointmentsPage />} />
+          <Route path="medical-history" element={<MedicalHistoryPage />} />
+        </Route>
+      </Route>
+
+      {/* ========== PANEL ADMIN ========== */}
+      <Route element={<RequireRole roles={["ADMIN"]} />}>
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+        </Route>
+      </Route>
+
+      {/* ========== 404 ========== */}
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
+  );
+}
+```
+
+#### **Catálogo de Animales**
+```tsx
+// project/src/pages/CatalogPage.tsx
+import { useState, useMemo } from 'react';
+import { apiClient } from '@/lib/api';
+
+type Size = "SMALL" | "MEDIUM" | "LARGE";
+type Energy = "LOW" | "MEDIUM" | "HIGH";
+
+interface Filters {
+  size?: Size[];
+  energy?: Energy[];
+  q?: string;
+  ageGroup?: string[];
+  sterilized?: boolean;
+}
+
+export default function CatalogPage() {
+  const [animals, setAnimals] = useState<Animal[]>([]);
+  const [filters, setFilters] = useState<Filters>({});
+  const [loading, setLoading] = useState(true);
+
+  // Filtrado client-side
+  const filteredAnimals = useMemo(() => {
+    return animals.filter(animal => {
+      // Filtro por tamaño
+      if (filters.size?.length && !filters.size.includes(animal.attributes.size))
+        return false;
+      
+      // Filtro por energía
+      if (filters.energy?.length && !filters.energy.includes(animal.attributes.energy))
+        return false;
+      
+      // Búsqueda por texto
+      if (filters.q) {
+        const query = filters.q.toLowerCase();
+        const matchName = animal.name.toLowerCase().includes(query);
+        const matchBreed = animal.attributes.breed.toLowerCase().includes(query);
+        if (!matchName && !matchBreed) return false;
+      }
+      
+      // Filtro por esterilización
+      if (filters.sterilized !== undefined) {
+        const isSterilized = animal.attributes.sterilized === "Yes";
+        if (isSterilized !== filters.sterilized) return false;
+      }
+      
+      return true;
+    });
+  }, [animals, filters]);
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-4xl font-bold mb-8">Catálogo de Animales</h1>
+      
+      {/* Filtros */}
+      <FilterPanel filters={filters} onChange={setFilters} />
+      
+      {/* Grid de animales */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredAnimals.map(animal => (
+          <AnimalCard key={animal.id} animal={animal} />
+        ))}
+      </div>
+      
+      {filteredAnimals.length === 0 && (
+        <EmptyState message="No se encontraron animales con los filtros seleccionados" />
+      )}
+    </div>
+  );
+}
+```
+
+#### **Cliente API**
+```typescript
+// project/src/lib/api.ts
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api/v1";
+
+function getToken(): string | null {
+  try {
+    const mem = useAuthStore.getState()?.token;
+    if (mem) return mem;
+    
+    const persisted = JSON.parse(localStorage.getItem("auth-storage") || "null");
+    return persisted?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export const apiClient = {
+  // ========== ANIMALES ==========
+  async getAnimals(filters?: FilterOptions): Promise<Animal[]> {
+    const params = new URLSearchParams();
+    if (filters?.size) params.append('size', filters.size.join(','));
+    if (filters?.energy) params.append('energy', filters.energy.join(','));
+    if (filters?.q) params.append('q', filters.q);
+    
+    const res = await fetch(`${API_BASE}/animals?${params}`, {
+      credentials: 'include',
+    });
+    
+    if (!res.ok) throw new Error('Error al obtener animales');
+    return res.json();
+  },
+
+  async getAnimalById(id: string): Promise<Animal> {
+    const res = await fetch(`${API_BASE}/animals/${id}`, {
+      credentials: 'include',
+    });
+    
+    if (!res.ok) throw new Error('Animal no encontrado');
+    return res.json();
+  },
+
+  // ========== AUTENTICACIÓN ==========
+  async login(email: string, password: string) {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+      credentials: 'include',
+    });
+    
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Error al iniciar sesión');
+    return data;
+  },
+
+  // ========== SOLICITUDES ==========
+  async submitApplication(data: ApplicationData) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/applications`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+      credentials: 'include',
+    });
+    
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || 'Error al enviar solicitud');
+    return result;
+  },
+
+  // ========== MATCHING ==========
+  async getRecommendations(limit = 15) {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/matching/recommendations?limit=${limit}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    });
+    
+    if (!res.ok) throw new Error('Error al obtener recomendaciones');
+    return res.json();
+  },
+};
+```
+
+---
+
+## 🤖 3. ML SERVICE - Predicción ML (Python + FastAPI + scikit-learn)
+
+### **Librerías Python**
+
+```txt
+# ml-service/requirements.txt
+fastapi==0.115.6          # Framework web moderno async
+uvicorn[standard]==0.34.0 # ASGI server production-ready
+pandas==2.2.3             # Manipulación y análisis de datos
+numpy==1.26.4             # Operaciones numéricas vectorizadas
+scikit-learn==1.6.1       # Machine Learning (KNN)
+joblib==1.4.2             # Serialización eficiente de modelos
+pydantic==2.10.5          # Validación de datos con tipos
+requests==2.32.3          # Cliente HTTP
+```
+
+---
+
+### **Entrenamiento del Modelo KNN**
+
+```python
+# ml-service/train.py
+import os
+import joblib
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import classification_report, confusion_matrix
+
+DATA_PATH = "data/dataset_con_adopta_corregido.csv"
+MODEL_DIR = "model"
+MODEL_PATH = os.path.join(MODEL_DIR, "knn_adopta_model.joblib")
+FEATURES_PATH = os.path.join(MODEL_DIR, "knn_feature_names.joblib")
+TRAIN_DATA_PATH = os.path.join(MODEL_DIR, "train_data.joblib")
+
+def main():
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+    # Cargar dataset
+    df = pd.read_csv(DATA_PATH)
+    print(f"📊 Dataset cargado: {len(df)} registros")
+    print(f"📊 Columnas: {list(df.columns)}")
+
+    # Target: Adopta (0=No adoptado, 1=Adoptado)
+    if "Adopta" not in df.columns:
+        raise ValueError("El CSV debe tener la columna 'Adopta' (0/1).")
+
+    y = df["Adopta"].astype(int)
+
+    # Features: todo menos Adopta y AdoptionSpeed
+    X = df.drop(columns=["Adopta"])
+    if "AdoptionSpeed" in X.columns:
+        X = X.drop(columns=["AdoptionSpeed"])
+
+    print(f"✅ Features: {len(X.columns)}")
+    print(f"✅ Target distribution:\n{y.value_counts()}")
+
+    # Split 80/20 estratificado
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y
+    )
+
+    print(f"✅ Train: {len(X_train)}, Test: {len(X_test)}")
+
+    # Pipeline con StandardScaler + KNN
+    pipe = Pipeline([
+        ("scaler", StandardScaler()),
+        ("knn", KNeighborsClassifier(
+            n_neighbors=15,        # K=15 vecinos
+            metric="manhattan",    # Distancia L1
+            weights="uniform"      # Todos los vecinos pesan igual
+        ))
+    ])
+
+    # Entrenar modelo
+    print("\n🔄 Entrenando modelo KNN...")
+    pipe.fit(X_train, y_train)
+
+    # Evaluar
+    y_pred = pipe.predict(X_test)
+    print("\n=== REPORTE DE CLASIFICACIÓN ===")
+    print(classification_report(y_test, y_pred))
+    print("\n=== MATRIZ DE CONFUSIÓN ===")
+    print(confusion_matrix(y_test, y_pred))
+
+    # Guardar modelo + features + datos de entrenamiento
+    joblib.dump(pipe, MODEL_PATH)
+    joblib.dump(list(X.columns), FEATURES_PATH)
+    joblib.dump({"X_train": X_train, "y_train": y_train}, TRAIN_DATA_PATH)
+
+    print(f"\n✅ Modelo guardado en: {MODEL_PATH}")
+    print(f"✅ Features guardadas en: {FEATURES_PATH}")
+    print(f"✅ Datos de entrenamiento guardados en: {TRAIN_DATA_PATH}")
+    print(f"✅ Total features: {len(X.columns)}")
+    print(f"✅ Total muestras entrenamiento: {len(X_train)}")
+
+if __name__ == "__main__":
+    main()
+```
+
+**Características del Modelo:**
+- **Algoritmo**: K-Nearest Neighbors (KNN)
+- **Vecinos (K)**: 15
+- **Métrica**: Manhattan (L1) - `d = Σ|x_i - y_i|`
+- **Pesos**: Uniform (todos los vecinos pesan igual)
+- **Escalado**: StandardScaler - `x' = (x - μ) / σ`
+- **Train/Test Split**: 80/20 estratificado
+- **Serialización**: joblib (eficiente para numpy arrays)
+
+---
+
+### **API FastAPI - Servicio de Predicción**
+
+```python
+# ml-service/app.py
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+import joblib
+import numpy as np
+import pandas as pd
+import os
+
+MODEL_DIR = "model"
+MODEL_PATH = os.path.join(MODEL_DIR, "knn_adopta_model.joblib")
+FEATURES_PATH = os.path.join(MODEL_DIR, "knn_feature_names.joblib")
+TRAIN_DATA_PATH = os.path.join(MODEL_DIR, "train_data.joblib")
+
+app = FastAPI(title="KNN Adopciones - Predictor (Adopta 0/1)")
+
+# ========== CORS ==========
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5000",
+        "http://localhost:5173",
+        "https://*.onrender.com",
+        "https://*.vercel.app",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ========== CARGAR MODELO AL INICIAR ==========
+if not os.path.exists(MODEL_PATH) or not os.path.exists(FEATURES_PATH):
+    raise RuntimeError("No existe el modelo. Ejecuta primero: python train.py")
+
+model = joblib.load(MODEL_PATH)
+feature_names = joblib.load(FEATURES_PATH)
+
+# Cargar datos de entrenamiento para explicaciones
+train_data = None
+y_train = None
+if os.path.exists(TRAIN_DATA_PATH):
+    train_data = joblib.load(TRAIN_DATA_PATH)
+    y_train = train_data["y_train"].values
+    print(f"✅ Datos de entrenamiento cargados: {len(y_train)} muestras")
+else:
+    print(f"⚠️ No se encontraron datos de entrenamiento")
+    print("   Las explicaciones de vecinos NO estarán disponibles")
+
+# ========== ENDPOINTS ==========
+
+@app.get("/health")
+def health():
+    """Health check endpoint"""
+    return {
+        "status": "ok",
+        "features": len(feature_names),
+        "model_type": "KNeighborsClassifier",
+        "k_neighbors": 15
+    }
+
+@app.post("/predict")
+def predict(payload: dict):
+    """
+    Predice probabilidad de adopción para un animal
+    
+    Input: Features del animal (Age, Gender, Breed1, Color1, etc.)
+    Output: {
+        "pred": 0 o 1,
+        "proba_adopta_1": 0.0-1.0,
+        "explanation": {
+            "adopted_neighbors": int,
+            "not_adopted_neighbors": int,
+            "total_neighbors": 15,
+            "neighbor_distances": [...]
+        }
+    }
+    """
+    print(f"\n{'='*80}")
+    print(f"🐕 NUEVA PREDICCIÓN")
+    print(f"{'='*80}")
+    
+    # Validar campos requeridos
+    missing = [f for f in feature_names if f not in payload]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "Faltan features", "missing": missing}
+        )
+
+    # Construir DataFrame con nombres de columnas
+    x_dict = {f: payload[f] for f in feature_names}
+    x_df = pd.DataFrame([x_dict])
+    
+    print(f"📦 Features recibidas:")
+    for feature in feature_names[:5]:
+        print(f"   {feature:15} = {payload.get(feature)}")
+    print(f"   ... (+{len(feature_names)-5} más)")
+    
+    # ========== PREDICCIÓN ==========
+    pred = int(model.predict(x_df)[0])
+    
+    proba = None
+    if hasattr(model, "predict_proba"):
+        proba_array = model.predict_proba(x_df)[0]
+        proba = float(proba_array[1])  # Probabilidad de clase 1 (adoptado)
+        
+        print(f"\n🔍 Predicción:")
+        print(f"   Clase predicha: {pred} ({'Adoptado' if pred == 1 else 'No adoptado'})")
+        print(f"   Probabilidad adoptado: {proba:.1%}")
+        print(f"   Probabilidad NO adoptado: {proba_array[0]:.1%}")
+    
+    # ========== EXPLICACIÓN (Vecinos cercanos) ==========
+    explanation = None
+    if y_train is not None:
+        try:
+            # Obtener K vecinos más cercanos
+            knn_model = model.named_steps['knn']
+            scaler = model.named_steps['scaler']
+            
+            x_scaled = scaler.transform(x_df)
+            distances, indices = knn_model.kneighbors(x_scaled, return_distance=True)
+            
+            # Etiquetas de los vecinos
+            neighbor_labels = [int(y_train[idx]) for idx in indices[0]]
+            adopted_neighbors = sum(neighbor_labels)
+            not_adopted_neighbors = len(neighbor_labels) - adopted_neighbors
+            
+            explanation = {
+                "adopted_neighbors": adopted_neighbors,
+                "not_adopted_neighbors": not_adopted_neighbors,
+                "total_neighbors": len(neighbor_labels),
+                "neighbor_distances": distances[0].tolist(),
+                "neighbor_labels": neighbor_labels
+            }
+            
+            print(f"\n💡 Explicación:")
+            print(f"   Vecinos adoptados: {adopted_neighbors}/15")
+            print(f"   Vecinos NO adoptados: {not_adopted_neighbors}/15")
+            print(f"   Porcentaje vecinos adoptados: {(adopted_neighbors/15)*100:.1f}%")
+            
+        except Exception as e:
+            print(f"⚠️ Error generando explicación: {e}")
+    
+    print(f"{'='*80}\n")
+    
+    return {
+        "pred": pred,
+        "proba_adopta_1": proba,
+        "explanation": explanation
+    }
+
+# ========== MAIN ==========
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
+```
+
+**Características del API:**
+- ✅ **FastAPI**: Framework moderno async
+- ✅ **CORS configurado**: Permite requests desde frontend/backend
+- ✅ **Validación**: Verifica todas las features requeridas
+- ✅ **Predicción**: Clase (0/1) y probabilidad (0.0-1.0)
+- ✅ **Explicabilidad**: Retorna vecinos cercanos y sus etiquetas
+- ✅ **Logging**: Imprime detalles de cada predicción
+- ✅ **Health check**: Endpoint `/health` para monitoreo
+
+---
+
+### **Dataset y Features**
+
+```python
+# Features utilizadas (15 total):
+FEATURES = [
+    "Age",              # Edad en meses
+    "Gender",           # 1=Macho, 2=Hembra, 3=Mixto
+    "Breed1",           # Código de raza principal
+    "Breed2",           # Código de raza secundaria (mestizos)
+    "Color1",           # Color principal
+    "Color2",           # Color secundario
+    "Color3",           # Color terciario
+    "MaturitySize",     # 1=Pequeño, 2=Mediano, 3=Grande, 4=Extra Grande
+    "FurLength",        # 1=Corto, 2=Medio, 3=Largo
+    "Vaccinated",       # 1=Sí, 2=No, 3=No seguro
+    "Dewormed",         # 1=Sí, 2=No, 3=No seguro
+    "Sterilized",       # 1=Sí, 2=No, 3=No seguro
+    "Health",           # 1=Sano, 2=Lesión menor, 3=Lesión seria
+    "Fee",              # Costo de adopción
+    "PhotoAmt",         # Cantidad de fotos
+]
+```
+
+**Dataset:**
+- Fuente: Adaptado de PetFinder (Kaggle)
+- Registros: ~14,000 animales
+- Target: `Adopta` (0=No adoptado, 1=Adoptado)
+- Split: 80% entrenamiento, 20% prueba
+- Balanceo: Estratificado para mantener proporción de clases
+
+---
+
+## 4. SEGURIDAD - DevSecOps Implementation
+
+### **Prácticas de Seguridad Implementadas**
+
+#### **1. Helmet.js - Security Headers (OWASP)**
+
+```typescript
+// backend/src/server.ts
+import helmet from "helmet";
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+```
+
+**Headers de Seguridad Aplicados:**
+- ✅ `Content-Security-Policy` - Previene XSS
+- ✅ `X-Frame-Options: DENY` - Previene Clickjacking
+- ✅ `X-Content-Type-Options: nosniff` - Previene MIME sniffing
+- ✅ `Strict-Transport-Security` - Force HTTPS
+- ✅ `X-XSS-Protection: 1; mode=block` - Protección XSS legacy
+- ✅ `Referrer-Policy: no-referrer` - Control de referrer
+
+#### **2. Rate Limiting - Anti Brute Force**
+
+```typescript
+// Configuración detallada
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,    // Ventana de 15 minutos
+  max: 100,                     // Máximo 100 requests
+  message: "Demasiadas peticiones",
+  standardHeaders: true,        // `RateLimit-*` headers
+  legacyHeaders: false,         // Deshabilitar `X-RateLimit-*`
+  handler: (req, res) => {
+    res.status(429).json({
+      error: "Demasiadas peticiones desde esta IP",
+      retryAfter: 900 // 15 min en segundos
+    });
+  },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,                      // Solo 10 intentos de login
+  skipSuccessfulRequests: true, // No contar requests exitosas
+});
+```
+
+**Protecciones:**
+- 🛡️ Previene ataques de fuerza bruta en login
+- 🛡️ Mitiga ataques DDoS
+- 🛡️ Rate limiting granular por endpoint
+- 🛡️ Headers estándar de rate limit
+
+#### **3. Input Validation - Zod Schemas**
+
+**Prevención de Ataques:**
+- ✅ SQL/NoSQL Injection
+- ✅ XSS (Cross-Site Scripting)
+- ✅ Command Injection
+- ✅ Path Traversal
+
+**Schemas de Validación:**
+```typescript
+// Validación de email
+z.string()
+  .email("Email inválido")
+  .toLowerCase()
+  .trim()
+  .max(255);
+
+// Validación de password
+z.string()
+  .min(8)
+  .max(128)
+  .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, "Debe contener mayúscula, minúscula y número");
+
+// Validación de teléfono
+z.string()
+  .regex(/^\+?[0-9]{10,15}$/, "Teléfono inválido");
+```
+
+#### **4. Autenticación Robusta**
+
+**JWT Configuration:**
+```typescript
+// backend/src/utils/jwt.ts
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_EXPIRES_IN = "7d";
+
+export function signJwt(payload: object): string {
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: JWT_EXPIRES_IN,
+    algorithm: "HS256"
+  });
+}
+
+export function verifyJwt(token: string): any {
+  return jwt.verify(token, JWT_SECRET, {
+    algorithms: ["HS256"]
+  });
+}
+```
+
+**Password Hashing:**
+```typescript
+import bcrypt from "bcryptjs";
+
+// Hash password con 10 rounds
+const hashedPassword = await bcrypt.hash(plainPassword, 10);
+
+// Verificar password
+const isValid = await bcrypt.compare(plainPassword, hashedPassword);
+```
+
+**Características:**
+- JWT firmado con HS256
+- bcrypt con 10 rounds (balance seguridad/performance)
+- Tokens con expiración
+- httpOnly cookies
+- Refresh token rotation
+
+#### **5. CORS Configurado**
+
+```typescript
+// backend/src/server.ts
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://huellitasquitenas.com",
+  "https://www.huellitasquitenas.com"
+];
+
+const corsDelegate: CorsOptionsDelegate = (req, cb) => {
+  const origin = req.headers.origin || "";
+  const allow = allowedOrigins.includes(origin);
+  
+  cb(null, {
+    origin: allow,
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  });
+};
+
+app.use(cors(corsDelegate));
+```
+
+**Protecciones:**
+- ✅ Whitelist de orígenes permitidos
+- ✅ Credentials habilitados para cookies
+- ✅ Métodos HTTP limitados
+- ✅ Headers permitidos específicos
+
+#### **6. Secrets Management**
+
+```bash
+# backend/.env.example
+NODE_ENV=development
+PORT=4000
+MONGODB_URI=mongodb://localhost:27017/huellitas
+JWT_SECRET=your-super-secret-jwt-key-change-this
+COOKIE_NAME=auth
+CORS_ORIGIN=http://localhost:5173
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+
+# Email
+SENDGRID_API_KEY=your-sendgrid-key
+
+# ML Service
+ML_SERVICE_URL=http://localhost:8001
+```
+
+**Mejores Prácticas:**
+- ✅ `.env` en `.gitignore`
+- ✅ `.env.example` documentado
+- ✅ Secrets nunca en código
+- ✅ Variables validadas al inicio
+- ✅ Diferentes secrets por ambiente
+
+---
+
+## 5. TESTING Y CI/CD
+
+### **Testing - Backend (Jest + Supertest)**
+
+#### **Configuración Jest**
+```javascript
+// backend/jest.config.js
+module.exports = {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  roots: ['<rootDir>/src'],
+  testMatch: ['**/__tests__/**/*.test.ts'],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/__tests__/**',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 70,
+      functions: 70,
+      lines: 70,
+      statements: 70,
+    },
+  },
+};
+```
+
+#### **Tests Implementados**
+
+**1. Model Tests**
+```typescript
+// backend/src/__tests__/animal.model.test.ts
+describe('Animal Model', () => {
+  it('should create animal with valid data', async () => {
+    const animal = new Animal({
+      name: 'Max',
+      attributes: {
+        age: 2,
+        size: 'MEDIUM',
+        breed: 'Labrador',
+        gender: 'MALE',
+        energy: 'HIGH'
+      },
+      foundationId: new Types.ObjectId()
+    });
+    
+    await animal.save();
+    expect(animal.name).toBe('Max');
+    expect(animal.state).toBe('AVAILABLE');
+  });
+  
+  it('should reject invalid size', async () => {
+    const animal = new Animal({
+      name: 'Max',
+      attributes: { size: 'INVALID' }
+    });
+    
+    await expect(animal.save()).rejects.toThrow();
+  });
+});
+```
+
+**2. Route Tests**
+```typescript
+// backend/src/__tests__/auth.route.test.ts
+import request from 'supertest';
+import app from '../server';
+
+describe('POST /api/v1/auth/register', () => {
+  it('should register new user', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        name: 'Test User',
+        email: 'test@example.com',
+        password: 'Test123!@#',
+      });
+    
+    expect(res.status).toBe(201);
+    expect(res.body.user.email).toBe('test@example.com');
+    expect(res.body.token).toBeDefined();
+  });
+  
+  it('should reject weak password', async () => {
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send({ password: 'weak' });
+    
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('8 caracteres');
+  });
+  
+  it('should reject duplicate email', async () => {
+    // First registration
+    await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'duplicate@test.com',
+        password: 'Test123!@#',
+        name: 'User 1'
+      });
+    
+    // Second registration (should fail)
+    const res = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'duplicate@test.com',
+        password: 'Test123!@#',
+        name: 'User 2'
+      });
+    
+    expect(res.status).toBe(400);
+  });
+});
+```
+
+**3. Middleware Tests**
+```typescript
+// backend/src/__tests__/auth.middleware.test.ts
+describe('requireAuth middleware', () => {
+  it('should allow request with valid token', async () => {
+    const token = signJwt({ id: 'user123', role: 'ADOPTER' });
+    
+    const res = await request(app)
+      .get('/api/v1/users/profile')
+      .set('Authorization', `Bearer ${token}`);
+    
+    expect(res.status).toBe(200);
+  });
+  
+  it('should reject request without token', async () => {
+    const res = await request(app)
+      .get('/api/v1/users/profile');
+    
+    expect(res.status).toBe(401);
+  });
+  
+  it('should reject expired token', async () => {
+    const expiredToken = jwt.sign(
+      { id: 'user123' },
+      JWT_SECRET,
+      { expiresIn: '-1h' }
+    );
+    
+    const res = await request(app)
+      .get('/api/v1/users/profile')
+      .set('Authorization', `Bearer ${expiredToken}`);
+    
+    expect(res.status).toBe(401);
+  });
+});
+```
+
+**Cobertura de Tests:**
+- ✅ **11 test suites**
+- ✅ Models: Animal, Application, User
+- ✅ Routes: Auth, Animals, Applications
+- ✅ Middleware: Auth, Validation
+- ✅ Services: ML Client, Matching
+
+---
+
+### **CI/CD - GitHub Actions**
+
+#### **Backend CI Workflow**
+```yaml
+# .github/workflows/backend-ci.yml
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+      
+      - name: TypeScript Type Check
+        run: |
+          cd backend
+          npm run build
+      
+      - name: Run Tests
+        run: |
+          cd backend
+          npm test
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/test
+          JWT_SECRET: test-secret
+      
+      - name: Security Audit
+        run: |
+          cd backend
+          npm audit --production
+```
+
+#### **Frontend CI Workflow**
+```yaml
+# .github/workflows/frontend-ci.yml
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'project/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'project/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: project/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd project
+          npm ci
+      
+      - name: ESLint
+        run: |
+          cd project
+          npm run lint
+      
+      - name: TypeScript Type Check
+        run: |
+          cd project
+          npm run typecheck
+      
+      - name: Build
+        run: |
+          cd project
+          npm run build
+      
+      - name: Security Audit
+        run: |
+          cd project
+          npm audit --production
+```
+
+#### **ML Service CI Workflow**
+```yaml
+# .github/workflows/ml-service-ci.yml
+name: ML Service CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'ml-service/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'ml-service/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          cd ml-service
+          pip install -r requirements.txt
+      
+      - name: Python Syntax Check
+        run: |
+          cd ml-service
+          python -m py_compile *.py
+      
+      - name: Run Tests
+        run: |
+          cd ml-service
+          python -m pytest tests/ -v
+      
+      - name: Model Verification
+        run: |
+          cd ml-service
+          python verify_deployment.py
+      
+      - name: Security Audit
+        run: |
+          pip install pip-audit
+          pip-audit
+```
+
+**Características CI/CD:**
+- ✅ Ejecución automática en push/PR
+- ✅ Tests en ambiente limpio (Ubuntu)
+- ✅ Cache de dependencias para velocidad
+- ✅ Security audits automáticos
+- ✅ Type checking estricto
+- ✅ Linting de código
+- ✅ Build verification
+
+---
+
+## 6. CARACTERÍSTICAS PRINCIPALES DEL SISTEMA
+
+### **Para Adoptantes (ADOPTER)**
+1. **Catálogo de Animales**
+   - Filtros avanzados (tamaño, energía, edad, raza)
+   - Búsqueda por texto
+   - Vista de cards con información clave
+   - Galería de fotos
+
+2. **Sistema de Matching**
+   - Recomendaciones personalizadas basadas en preferencias
+   - Score de compatibilidad 0-100
+   - Top 15 mejores matches
+   - Explicación de por qué coinciden
+
+3. **Formulario de Solicitud**
+   - Formulario completo de evaluación
+   - Scoring automático de idoneidad
+   - Predicción ML de propensión de adopción
+   - Upload de documentos
+
+4. **Seguimiento de Solicitudes**
+   - Estados: Recibida → En Revisión → Visita → Aprobada/Rechazada
+   - Notificaciones en tiempo real
+   - Historial completo
+
+5. **Gestión de Perfil**
+   - Preferencias de adopción
+   - Información personal
+   - Historial de solicitudes
+   - Citas agendadas
+
+### **Para Fundaciones (FOUNDATION)**
+1. **Panel de Gestión de Animales**
+   - CRUD completo de animales
+   - Upload de imágenes a Cloudinary
+   - Gestión de estado (Disponible/Reservado/Adoptado)
+   - Edición de características ML
+
+2. **Revisión de Solicitudes**
+   - Lista de solicitudes recibidas
+   - Scoring automático visible
+   - Predicción ML de propensión
+   - Cambio de estados workflow
+   - Notas y comentarios
+
+3. **Analytics y Estadísticas**
+   - Animales publicados vs adoptados
+   - Tasa de adopción
+   - Solicitudes por mes
+   - Gráficos interactivos (Recharts)
+
+4. **Gestión de Notificaciones**
+   - Notificaciones de nuevas solicitudes
+   - Alertas de citas programadas
+   - Recordatorios
+
+### **Para Clínicas Veterinarias (CLINIC)**
+1. **Historial Clínico**
+   - Registro médico de animales
+   - Vacunas y tratamientos
+   - Historial de visitas
+
+2. **Gestión de Citas**
+   - Calendario de citas
+   - Confirmación/Cancelación
+   - Notas de consulta
+
+3. **Registros Médicos**
+   - CRUD de clinical records
+   - Adjuntar documentos
+   - Seguimiento de tratamientos
+
+### **Para Administradores (ADMIN)**
+1. **Gestión de Usuarios**
+   - CRUD de usuarios
+   - Cambio de roles
+   - Suspensión/Activación
+
+2. **Monitoreo del Sistema**
+   - Logs de actividad
+   - Errores y excepciones
+   - Métricas de uso
+
+3. **Configuración Global**
+   - Settings del sistema
+   - Parámetros de matching
+   - Umbrales de scoring
+
+4. **Auditoría**
+   - Registro de acciones críticas
+   - Cambios en solicitudes
+   - Modificaciones de datos sensibles
+
+---
+
+## 7. SCRIPTS Y HERRAMIENTAS
+
+### **Backend Tools**
+
+```bash
+# backend/tools/
+
+# Población de Base de Datos
+- seed.ts                      # Poblar BD con datos de prueba
+                               # Crea usuarios, animales, solicitudes
+
+# Migración de Datos
+- migrateAnimalsToML.ts        # Migrar animales a formato ML
+                               # Convierte campos legibles a códigos
+- migrateImagesToCloudinary.ts # Migrar imágenes locales a CDN
+                               # Upload masivo a Cloudinary
+- migrateAnimalsAddMLFields.ts # Añadir campos ML a animales existentes
+
+# Testing ML
+- testMLClassifier.ts          # Probar predicciones ML end-to-end
+                               # Envía animal al ML service y valida
+- testKNN.ts                   # Probar algoritmo KNN de matching
+                               # Genera recomendaciones de prueba
+- validateMLSystem.ts          # Validar sistema ML completo
+                               # Coherencia predicción vs vecinos
+
+# Testing General
+- testEmail.ts                 # Probar servicio de email
+- testCloudinary.ts            # Probar upload a Cloudinary
+
+# Análisis
+- analyzeAdoptionPropensity.ts # Analizar propensión de animales
+- analyzeMLPrediction.ts       # Analizar predicciones del modelo
+
+# Utilidades
+- createTestNotifications.ts   # Crear notificaciones de prueba
+- resetAdoptedAnimals.ts       # Resetear estado de animales adoptados
+- checkAges.ts                 # Verificar consistencia de edades
+```
+
+**Ejemplo de Uso:**
+```bash
+# Poblar BD con datos de prueba
+npm run seed
+
+# Migrar imágenes a Cloudinary
+npx tsx tools/migrateImagesToCloudinary.ts
+
+# Validar sistema ML
+npx tsx tools/validateMLSystem.ts
+```
+
+### **ML Service Tools**
+
+```bash
+# ml-service/
+
+# Entrenamiento
+- train.py                     # Entrenar modelo KNN
+                               # Genera: knn_adopta_model.joblib
+
+# Verificación
+- verify_deployment.py         # Verificar deployment del modelo
+                               # Checks: modelo existe, features, health endpoint
+- check_labels.py              # Verificar etiquetas del dataset
+                               # Balance de clases, distribución
+
+# Testing
+- test_service.py              # Test del API FastAPI
+- test_coherencia.py           # Test coherencia predicción vs vecinos
+- test_explanation.py          # Test explicaciones del modelo
+- quick_test.py                # Test rápido de predicción
+
+# Debug
+- debug_knn.py                 # Debug algoritmo KNN
+                               # Muestra vecinos cercanos, distancias
+- debug_explanation.py         # Debug explicaciones
+                               # Verifica lógica de vecinos
+
+# Verificación Dataset
+- verificar_columnas.py        # Verificar columnas del dataset
+- verificar_coherencia_modelo.py # Verificar coherencia del modelo
+```
+
+**Ejemplo de Uso:**
+```bash
+# Entrenar modelo
+python train.py
+
+# Verificar deployment
+python verify_deployment.py
+
+# Test coherencia
+python test_coherencia.py
+```
+
+---
+
+## 8. RESUMEN EJECUTIVO
+
+### **Tecnologías Core**
+
+#### **Backend**
+- Node.js 20.x
+- Express.js 4.21.2
+- TypeScript 5.9.3 (strict mode)
+- MongoDB + Mongoose 8.18.3
+
+#### **Frontend**
+- React 18.3.1
+- TypeScript 5.9.3
+- Vite 5.4.20
+- TailwindCSS 3.4.1
+
+#### **ML Service**
+- Python 3.11
+- FastAPI 0.115.6
+- scikit-learn 1.6.1
+- KNN (K=15, Manhattan)
+
+#### **Seguridad**
+- Helmet.js 8.1.0
+- JWT (jsonwebtoken 9.0.2)
+- Zod 4.3.5
+- Rate Limiting (express-rate-limit 8.2.1)
+- bcryptjs 2.4.3
+
+#### **DevOps**
+- GitHub Actions
+- Jest 29.0.0 (11 test suites)
+- ESLint
+- Docker (opcional)
+
+---
+
+### **Características Destacadas**
+
+1. ✅ **Matching Inteligente**
+   - Distancia Manhattan en espacio escalado
+   - 15 vecinos cercanos
+   - Score 0-100
+   - Explicabilidad completa
+
+2. ✅ **Predicción ML de Adopción**
+   - Modelo entrenado con ~14K registros
+   - Probabilidad 0.0-1.0
+   - Explicación con vecinos
+   - Coherencia validada
+
+3. ✅ **Security-First (DevSecOps)**
+   - OWASP headers (Helmet)
+   - Rate limiting anti brute-force
+   - Validación Zod en runtime
+   - JWT + bcrypt
+   - CORS whitelist
+
+4. ✅ **TypeScript Strict**
+   - Frontend y Backend
+   - Type safety completa
+   - Interfaces bien definidas
+
+5. ✅ **CI/CD Automatizado**
+   - GitHub Actions
+   - Tests automáticos
+   - Security audits
+   - Type checking
+
+6. ✅ **Arquitectura Escalable**
+   - Microservicios desacoplados
+   - API RESTful
+   - CDN para imágenes
+   - Cache con React Query
+
+7. ✅ **UX Moderna**
+   - React 18 Hooks
+   - TailwindCSS responsive
+   - Toast notifications
+   - Loading states
+   - Error boundaries
+
+---
+
+### **Librerías Más Importantes por Categoría**
+
+#### **Framework Web**
+1. Express.js - Framework backend
+2. React 18 - UI library
+3. FastAPI - API ML moderna
+
+#### **Machine Learning**
+1. scikit-learn - KNN classifier
+2. pandas - Data manipulation
+3. numpy - Numerical operations
+
+#### **Base de Datos**
+1. Mongoose - MongoDB ODM
+2. MongoDB - NoSQL database
+
+#### **Seguridad**
+1. Helmet.js - Security headers
+2. Zod - Runtime validation
+3. bcryptjs - Password hashing
+4. jsonwebtoken - JWT auth
+5. express-rate-limit - Rate limiting
+
+#### **Estado y Data Fetching**
+1. Zustand - State management
+2. React Query - Data fetching
+3. React Hook Form - Formularios
+
+#### **UI/UX**
+1. TailwindCSS - Styling
+2. @headlessui/react - Componentes accesibles
+3. lucide-react - Iconos
+4. react-hot-toast - Notificaciones
+5. recharts - Gráficos
+
+#### **Testing**
+1. Jest - Test framework
+2. Supertest - HTTP testing
+3. ts-jest - TypeScript support
+
+#### **Build Tools**
+1. Vite - Frontend build tool
+2. TypeScript - Type safety
+3. ESLint - Code quality
+
+---
+
+### **Métricas del Proyecto**
+
+- **Líneas de Código**: ~50,000+
+- **Modelos de Datos**: 10+
+- **Endpoints API**: 50+
+- **Componentes React**: 80+
+- **Test Suites**: 11
+- **Features ML**: 15
+- **K Vecinos**: 15
+- **Usuarios Roles**: 4 (ADOPTER, FOUNDATION, CLINIC, ADMIN)
+
+---
+
+##  CONCLUSIÓN
+
+El sistema **Huellitas Quiteñas** representa una implementación completa y profesional de una aplicación web full-stack moderna que integra:
+
+- **Tecnologías de vanguardia**: React 18, TypeScript, Node.js 20, FastAPI
+- **Machine Learning aplicado**: KNN para matching y predicción de adopción
+- **Seguridad robusta**: Implementación completa de DevSecOps
+- **Arquitectura escalable**: Microservicios, API RESTful, CDN
+- **Calidad de código**: Tests automáticos, CI/CD, TypeScript strict
+- **UX excepcional**: Diseño responsive, notificaciones, estados de carga
+
+El proyecto demuestra dominio de conceptos avanzados como:
+- Algoritmos de Machine Learning (KNN)
+- Arquitectura de microservicios
+- Prácticas de seguridad OWASP
+- CI/CD y DevOps
+- Gestión de estado compleja
+- Validación de datos robusta
+
+---
